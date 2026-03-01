@@ -5,7 +5,10 @@ import { initTelegramApp, getTelegramDisplayName } from '../lib/telegram';
 import { useAppStore } from '../store/useAppStore';
 import { Card, InlineLink, Pill, PrimaryButton, ProgressBar, SectionTitle, ShellHeader } from '../components/ui';
 
-const stageMeta = {
+const stageMeta: Record<
+  'leftovers' | 'losses' | 'handoff' | 'closingPhotos',
+  { title: string; description: string; href?: string }
+> = {
   leftovers: {
     title: 'Остатки',
     description: 'Короткая отметка после пересчета.',
@@ -212,4 +215,3 @@ export const ShiftScreen = () => {
     </div>
   );
 };
-

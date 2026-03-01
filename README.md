@@ -67,11 +67,29 @@ npm run typecheck
 2. In Cloudflare Pages create a new project from the repo.
 3. Use these build settings:
    - Framework preset: `Vite`
+   - Node.js version: `20`
    - Build command: `npm run build`
    - Build output directory: `dist`
 4. Deploy.
 
 No runtime secrets are required for this MVP.
+
+## Cloudflare Pages Via Wrangler
+If you prefer CLI deploys:
+
+```bash
+npm run build
+npx wrangler pages deploy dist
+```
+
+Project config is already prepared in:
+- `wrangler.toml`
+
+## Pre-Deploy Checklist
+- Replace placeholder URLs in `src/config/links.ts`
+- Confirm `npm run build` passes locally
+- Verify the production output exists in `dist/`
+- Deploy to Cloudflare Pages and copy the final HTTPS URL
 
 ## Telegram BotFather Setup
 1. Deploy the app and copy the public HTTPS URL from Cloudflare Pages.
@@ -104,4 +122,3 @@ When moving to Supabase later:
 - map role by Telegram user ID whitelist,
 - move request/task acceptance to real multi-user sync,
 - add secure verification of Telegram init data on backend.
-
