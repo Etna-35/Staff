@@ -1,4 +1,4 @@
-import { createHashRouter } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { HandoffScreen } from './screens/HandoffScreen';
 import { LossesScreen } from './screens/LossesScreen';
@@ -7,7 +7,7 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { RequestsScreen } from './screens/RequestsScreen';
 import { ShiftScreen } from './screens/ShiftScreen';
 
-export const router = createHashRouter([
+export const router = createBrowserRouter([
   {
     path: '/',
     element: <AppShell />,
@@ -39,4 +39,3 @@ export const router = createHashRouter([
     ],
   },
 ]);
-

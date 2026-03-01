@@ -43,6 +43,7 @@ Expected result:
 - Vite starts a local server, typically on `http://localhost:5173`.
 - In a regular browser the app runs with fallback name `Гость смены`.
 - In Telegram WebView the app calls `tg.ready()` and `tg.expand()` and shows the Telegram user display name from `initDataUnsafe.user`.
+- Routes work as a standard SPA on Cloudflare Pages without `#` in the URL.
 
 ## Production Build
 Run:
