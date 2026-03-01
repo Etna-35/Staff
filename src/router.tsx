@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { HandoffScreen } from './screens/HandoffScreen';
 import { LossesScreen } from './screens/LossesScreen';
@@ -35,6 +35,10 @@ export const router = createBrowserRouter([
       {
         path: 'shift/losses',
         element: <LossesScreen />,
+      },
+      {
+        path: '*',
+        element: <Navigate to="/" replace />,
       },
     ],
   },
