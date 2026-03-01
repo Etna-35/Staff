@@ -1,0 +1,103 @@
+import type { AppState } from '../types/domain';
+
+export const mockState: AppState = {
+  role: 'owner',
+  telegramName: 'Алексей',
+  shift: {
+    id: 'shift-today',
+    startedAt: new Date().toISOString(),
+    dayLabel: 'Воскресенье, вечерняя смена',
+    leftoversChecked: false,
+    closingPhotosChecked: false,
+  },
+  tasks: [
+    {
+      id: 'task-1',
+      title: 'Обновить витрину десертов',
+      assignee: 'Маша',
+      points: 20,
+      status: 'assigned',
+      dueLabel: 'до 20:00',
+    },
+    {
+      id: 'task-2',
+      title: 'Промаркировать заготовки',
+      assignee: 'Илья',
+      points: 15,
+      status: 'done',
+      dueLabel: 'до конца смены',
+      completedAt: new Date().toISOString(),
+    },
+    {
+      id: 'task-3',
+      title: 'Проверить кофе-зону',
+      assignee: 'Алексей',
+      points: 10,
+      status: 'accepted',
+      dueLabel: 'сделано',
+      completedAt: new Date().toISOString(),
+      acceptedAt: new Date().toISOString(),
+    },
+    {
+      id: 'task-4',
+      title: 'Пересобрать барный лед',
+      assignee: 'Маша',
+      points: 12,
+      status: 'returned',
+      dueLabel: 'вернуть до 21:30',
+      returnReason: 'Нужна новая маркировка контейнера',
+    },
+  ],
+  losses: {
+    spoilage: 1200,
+    staffMeal: 450,
+    rd: 300,
+    updatedAt: new Date().toISOString(),
+  },
+  handoffItems: [
+    {
+      id: 'handoff-1',
+      area: 'kitchen',
+      title: 'Соус том-ям на утро',
+      criticality: 'high',
+      checked: true,
+      reason: 'Готово и промаркировано',
+    },
+    {
+      id: 'handoff-2',
+      area: 'kitchen',
+      title: 'База для рамэна',
+      criticality: 'medium',
+      checked: false,
+      reason: '',
+    },
+    {
+      id: 'handoff-3',
+      area: 'bar',
+      title: 'Инвентарь сиропов',
+      criticality: 'medium',
+      checked: true,
+      reason: 'Передано ночной смене',
+    },
+    {
+      id: 'handoff-4',
+      area: 'bar',
+      title: 'Лимонный кордиал',
+      criticality: 'low',
+      checked: false,
+      reason: '',
+    },
+  ],
+  requests: [
+    {
+      id: 'req-1',
+      category: 'kitchen',
+      item: 'Авокадо',
+      remaining: '2 кг',
+      needed: '8 кг',
+      comment: 'Нужна поставка к утру',
+      createdAt: new Date().toISOString(),
+    },
+  ],
+};
+
