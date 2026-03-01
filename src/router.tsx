@@ -6,6 +6,7 @@ import { MissionsScreen } from './screens/MissionsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { RequestsScreen } from './screens/RequestsScreen';
 import { ShiftScreen } from './screens/ShiftScreen';
+import { TimesheetScreen } from './screens/TimesheetScreen';
 
 export const router = createBrowserRouter([
   {
@@ -27,6 +28,10 @@ export const router = createBrowserRouter([
       {
         path: 'profile',
         element: <ProfileScreen />,
+      },
+      {
+        path: 'profile/timesheet',
+        element: <TimesheetScreen />,
       },
       {
         path: 'shift/handoff',

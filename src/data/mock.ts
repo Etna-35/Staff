@@ -1,11 +1,21 @@
 import type { AppState } from '../types/domain';
 
+const now = new Date();
+
+const isoAt = (dayOffset: number, hour: number, minute: number) => {
+  const value = new Date(now);
+  value.setDate(value.getDate() + dayOffset);
+  value.setHours(hour, minute, 0, 0);
+  return value.toISOString();
+};
+
 export const mockState: AppState = {
   role: 'owner',
   telegramName: 'Алексей',
+  currentUserId: 'user-alexey',
   shift: {
     id: 'shift-today',
-    startedAt: new Date().toISOString(),
+    startedAt: now.toISOString(),
     dayLabel: 'Воскресенье, вечерняя смена',
     leftoversChecked: false,
     closingPhotosChecked: false,
@@ -26,7 +36,7 @@ export const mockState: AppState = {
       points: 15,
       status: 'done',
       dueLabel: 'до конца смены',
-      completedAt: new Date().toISOString(),
+      completedAt: now.toISOString(),
     },
     {
       id: 'task-3',
@@ -35,8 +45,8 @@ export const mockState: AppState = {
       points: 10,
       status: 'accepted',
       dueLabel: 'сделано',
-      completedAt: new Date().toISOString(),
-      acceptedAt: new Date().toISOString(),
+      completedAt: now.toISOString(),
+      acceptedAt: now.toISOString(),
     },
     {
       id: 'task-4',
@@ -52,7 +62,7 @@ export const mockState: AppState = {
     spoilage: 1200,
     staffMeal: 450,
     rd: 300,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now.toISOString(),
   },
   handoffItems: [
     {
@@ -96,8 +106,113 @@ export const mockState: AppState = {
       remaining: '2 кг',
       needed: '8 кг',
       comment: 'Нужна поставка к утру',
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
+    },
+  ],
+  staffProfiles: [
+    {
+      id: 'user-alexey',
+      name: 'Алексей',
+      department: 'kitchen',
+      rolePreset: 'cook',
+      tenureLabel: '8 мес',
+      hourlyRate: 340,
+    },
+    {
+      id: 'user-masha',
+      name: 'Маша',
+      department: 'hall',
+      rolePreset: 'waiter',
+      tenureLabel: '1 год',
+      hourlyRate: null,
+    },
+    {
+      id: 'user-ilya',
+      name: 'Илья',
+      department: 'bar',
+      rolePreset: 'bartender',
+      tenureLabel: '5 мес',
+      hourlyRate: null,
+    },
+    {
+      id: 'user-olga',
+      name: 'Ольга',
+      department: 'other',
+      rolePreset: 'custom',
+      tenureLabel: '3 мес',
+      hourlyRate: 230,
+    },
+  ],
+  timeEntries: [
+    {
+      id: 'time-1',
+      userId: 'user-alexey',
+      rolePreset: 'cook',
+      startAt: isoAt(0, 11, 25),
+      endAt: isoAt(0, 19, 10),
+      earlyStart: false,
+      earlyReason: null,
+      createdAt: isoAt(0, 11, 25),
+    },
+    {
+      id: 'time-2',
+      userId: 'user-alexey',
+      rolePreset: 'cook',
+      startAt: isoAt(-2, 10, 45),
+      endAt: isoAt(-2, 20, 5),
+      earlyStart: true,
+      earlyReason: 'Ранний старт из-за поставки мяса',
+      createdAt: isoAt(-2, 10, 45),
+    },
+    {
+      id: 'time-3',
+      userId: 'user-masha',
+      rolePreset: 'waiter',
+      startAt: isoAt(0, 11, 20),
+      endAt: isoAt(0, 22, 50),
+      earlyStart: false,
+      earlyReason: null,
+      createdAt: isoAt(0, 11, 20),
+    },
+    {
+      id: 'time-4',
+      userId: 'user-masha',
+      rolePreset: 'waiter',
+      startAt: isoAt(-4, 11, 20),
+      endAt: isoAt(-4, 23, 20),
+      earlyStart: false,
+      earlyReason: null,
+      createdAt: isoAt(-4, 11, 20),
+    },
+    {
+      id: 'time-5',
+      userId: 'user-ilya',
+      rolePreset: 'bartender',
+      startAt: isoAt(-1, 11, 10),
+      endAt: isoAt(-1, 23, 25),
+      earlyStart: true,
+      earlyReason: 'Подготовка бара к мероприятию',
+      createdAt: isoAt(-1, 11, 10),
+    },
+    {
+      id: 'time-6',
+      userId: 'user-ilya',
+      rolePreset: 'bartender',
+      startAt: isoAt(-6, 11, 30),
+      endAt: isoAt(-6, 22, 45),
+      earlyStart: false,
+      earlyReason: null,
+      createdAt: isoAt(-6, 11, 30),
+    },
+    {
+      id: 'time-7',
+      userId: 'user-olga',
+      rolePreset: 'custom',
+      startAt: isoAt(-10, 11, 20),
+      endAt: isoAt(-10, 18, 20),
+      earlyStart: false,
+      earlyReason: null,
+      createdAt: isoAt(-10, 11, 20),
     },
   ],
 };
-

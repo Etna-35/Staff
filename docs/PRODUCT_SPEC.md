@@ -25,6 +25,7 @@ Additional internal screens:
 - `Передача`
 - `Потери`
 - `Фото закрытия` as modal / placeholder in MVP
+- `Табель`
 
 ## UX Principles
 - Mobile-first for iPhone and Telegram WebView.
@@ -99,6 +100,50 @@ Rules:
 - In MVP requests are stored locally.
 - External Yandex Forms URLs are configurable in one central file.
 
+### StaffProfile
+- `id: string`
+- `name: string`
+- `department: kitchen | bar | hall | other`
+- `rolePreset: waiter | bartender | cook | custom`
+- `tenureLabel?: string`
+- `hourlyRate: number | null`
+
+Rules:
+- Waiters use preset rate `190 ₽/hour`.
+- Bartenders use preset rate `270 ₽/hour`.
+- Cooks and custom roles can edit their own rate in profile.
+
+### TimeEntry
+- `id: string`
+- `userId: string`
+- `rolePreset: waiter | bartender | cook | custom`
+- `startAt: string`
+- `endAt: string | null`
+- `earlyStart: boolean`
+- `earlyReason: string | null`
+- `createdAt: string`
+
+Rules:
+- Normal shift start is `11:20` local device time.
+- Normal shift end reference is `23:20`.
+- Starting before `11:20` requires explicit reason.
+- Only one active shift is allowed per employee.
+- Closing a shift shorter than `15 minutes` requires confirmation.
+
+## Timesheet And Salary
+- Profile includes a timesheet block with start/end actions and weekly/monthly hours.
+- Earnings are estimated as `hours * hourly rate`.
+- Minutes count proportionally.
+- Salary and today's earnings are hidden by default and temporarily revealed by an eye toggle.
+- Salary uses privacy UX only; it is not treated as secure data protection.
+- A visible note always states: `≈ Предварительный расчёт`.
+
+## Owner Statistics
+- Owner sees team aggregates for `today / week / month`.
+- Owner can filter statistics by department, employee, and period.
+- Staff rows show shifts count, hours, early starts count, and preliminary amount.
+- Aggregates are sorted by worked hours descending.
+
 ## Configuration
 All editable URLs live in one file:
 - `src/config/links.ts`
@@ -127,6 +172,10 @@ Current placeholders:
 - Missions flow supports create, done, accept, return with local persistence.
 - Requests screen supports local request creation and external-form links.
 - Profile shows role switch, personal stats, and weekly neutral metrics.
+- Profile supports timesheet controls, editable rate for cook/custom roles, and privacy-hidden earnings.
+- Timesheet screen lists shifts for week/month with early start reasons.
+- Early shift start requires a reason before opening.
+- Owner dashboard shows team hour aggregates and early-start statistics.
 - Losses screen calculates operational damage with multiplier `1.2`.
 - Handoff screen supports kitchen and bar checklists with criticality.
 - Telegram WebApp bootstrap is wired and username display uses `initDataUnsafe.user` when available.
@@ -140,4 +189,3 @@ Current placeholders:
 - Push notifications
 - Production analytics
 - Real leaderboards with negative comparisons
-

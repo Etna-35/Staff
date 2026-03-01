@@ -13,7 +13,9 @@ Telegram Mini App MVP for restaurant staff operations. The app replaces shift ch
 - Shift dashboard with stage progress and gated close action
 - Missions flow with employee and owner acceptance states
 - Requests flow with local form storage and configurable external links
-- Profile with role switch and weekly neutral metrics
+- Profile with role switch, time tracking, hourly-rate setup, and privacy-hidden earnings
+- Timesheet screen with weekly/monthly shift history and early-start reasons
+- Owner team statistics for hours, shifts, early starts, and preliminary earnings
 - Handoff screen for kitchen and bar
 - Losses screen with operational damage calculation
 - Telegram Mini App bootstrap via `telegram-web-app.js`
@@ -21,6 +23,7 @@ Telegram Mini App MVP for restaurant staff operations. The app replaces shift ch
 ## Project Structure
 - `src/config/links.ts`: all editable URLs in one place
 - `src/data/mock.ts`: seed data for a live-looking demo
+- `src/lib/timeTracking.ts`: helper functions for shift rules and salary estimate
 - `src/store/useAppStore.ts`: local persisted state
 - `src/screens/*`: main app screens
 - `docs/PRODUCT_SPEC.md`: MVP spec and done criteria
@@ -110,6 +113,38 @@ Update these placeholders before real use:
 
 All are stored in:
 - `src/config/links.ts`
+
+## Timesheet Usage
+- Open `Я` to start or end a shift.
+- Starting before `11:20` requires a reason.
+- If an open shift already exists, the UI highlights it and prevents opening another one.
+- If a shift is shorter than `15 minutes`, closing requires extra confirmation.
+- `Табель` shows weekly and monthly entries with duration and early-start notes.
+
+## Hourly Rates And Salary Estimate
+- Waiters: `190 ₽ / hour`
+- Bartenders: `270 ₽ / hour`
+- Cooks: editable in profile
+- Custom roles: editable in profile
+
+Earnings are estimated locally as:
+
+```text
+worked hours × hourly rate
+```
+
+The amount is intentionally hidden behind a temporary eye toggle and always marked as:
+- `≈ Предварительный расчёт`
+
+This is for personal reference only and not a payroll source of truth.
+
+## Owner Statistics
+- Switch to `Owner/Admin` in profile to see team statistics.
+- Available filters:
+  - period: today / week / month
+  - department: kitchen / bar / hall / other
+  - employee: all or one person
+- Rows are sorted by worked hours descending.
 
 ## MVP Limits
 - No backend

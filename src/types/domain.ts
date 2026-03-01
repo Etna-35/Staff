@@ -10,6 +10,12 @@ export type HandoffArea = 'kitchen' | 'bar';
 
 export type StageKey = 'leftovers' | 'losses' | 'handoff' | 'closingPhotos';
 
+export type TeamDepartment = 'kitchen' | 'bar' | 'hall' | 'other';
+
+export type StaffRolePreset = 'waiter' | 'bartender' | 'cook' | 'custom';
+
+export type TimesheetPeriod = 'day' | 'week' | 'month';
+
 export type Task = {
   id: string;
   title: string;
@@ -57,13 +63,35 @@ export type Request = {
   createdAt: string;
 };
 
+export type StaffProfile = {
+  id: string;
+  name: string;
+  department: TeamDepartment;
+  rolePreset: StaffRolePreset;
+  tenureLabel?: string;
+  hourlyRate: number | null;
+};
+
+export type TimeEntry = {
+  id: string;
+  userId: string;
+  rolePreset: StaffRolePreset;
+  startAt: string;
+  endAt: string | null;
+  earlyStart: boolean;
+  earlyReason: string | null;
+  createdAt: string;
+};
+
 export type AppState = {
   role: Role;
   telegramName: string;
+  currentUserId: string;
   shift: Shift;
   tasks: Task[];
   losses: Losses;
   handoffItems: HandoffItem[];
   requests: Request[];
+  staffProfiles: StaffProfile[];
+  timeEntries: TimeEntry[];
 };
-

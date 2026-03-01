@@ -5,6 +5,7 @@ import type {
   InputHTMLAttributes,
   PropsWithChildren,
   ReactNode,
+  SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
 
@@ -121,6 +122,19 @@ export const Textarea = ({
   <textarea
     className={clsx(
       'min-h-24 w-full rounded-2xl border border-ink/10 bg-[#fcfaf5] px-4 py-3 text-sm outline-none placeholder:text-ink/35',
+      className,
+    )}
+    {...props}
+  />
+);
+
+export const Select = ({
+  className,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement>) => (
+  <select
+    className={clsx(
+      'w-full rounded-2xl border border-ink/10 bg-[#fcfaf5] px-4 py-3 text-sm outline-none',
       className,
     )}
     {...props}
