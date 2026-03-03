@@ -166,7 +166,7 @@ export const ShellHeader = ({
 
 const navItems = [
   { to: '/', label: 'Смена' },
-  { to: '/missions', label: 'Миссии' },
+  { to: '/missions', label: 'Задачи' },
   { to: '/requests', label: 'Заявки' },
   { to: '/profile', label: 'Я' },
 ];

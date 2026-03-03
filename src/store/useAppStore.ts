@@ -718,7 +718,7 @@ export const useAppStore = create<Store>()(
               assignee,
               points,
               status: 'assigned',
-              dueLabel: 'новая миссия',
+              dueLabel: 'новая задача',
             },
             ...state.tasks,
           ]),

@@ -38,13 +38,13 @@ export const MissionsScreen = () => {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-ink/55">Миссии смены</p>
+        <p className="text-sm text-ink/55">Задачи смены</p>
         <h1 className="font-display text-2xl font-semibold">Принятие без чатов</h1>
       </div>
 
       {currentEmployee?.role === 'owner' ? (
         <Card>
-          <SectionTitle title="Новая миссия" />
+          <SectionTitle title="Новая задача" />
           <form className="space-y-3" onSubmit={submitTask}>
             <Input
               placeholder="Что нужно сделать"
@@ -63,7 +63,7 @@ export const MissionsScreen = () => {
               value={points}
               onChange={(event) => setPoints(event.target.value)}
             />
-            <PrimaryButton type="submit">Создать миссию</PrimaryButton>
+            <PrimaryButton type="submit">Создать задачу</PrimaryButton>
           </form>
         </Card>
       ) : null}
@@ -120,7 +120,7 @@ export const MissionsScreen = () => {
               <div>
                 <p className="font-semibold">{task.title}</p>
                 <p className="mt-1 text-sm text-ink/55">
-                  {task.assignee} · {task.points} pts · {task.dueLabel}
+                  {task.assignee} · {task.points} очков · {task.dueLabel}
                 </p>
               </div>
               <Pill

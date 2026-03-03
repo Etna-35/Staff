@@ -219,6 +219,9 @@ export const ProfileScreen = () => {
   const [shortShiftPrompt, setShortShiftPrompt] = useState(false);
   const [entryError, setEntryError] = useState<string | null>(null);
   const [earningsVisible, setEarningsVisible] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
   const [showPinModal, setShowPinModal] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -282,12 +285,17 @@ export const ProfileScreen = () => {
       return;
     }
 
+    setSettingsError(null);
+    setSettingsSuccess(null);
     const parsed = Number(rateInput);
     const result = await setHourlyRate(rateInput.trim() ? parsed || 0 : null);
 
     if (!result.ok) {
-      setEntryError(result.reason ?? 'Не удалось сохранить ставку');
+      setSettingsError(result.reason ?? 'Не удалось сохранить ставку');
+      return;
     }
+
+    setSettingsSuccess('Ставка обновлена');
   };
 
   const onStartShift = () => {
@@ -361,6 +369,7 @@ export const ProfileScreen = () => {
     setShowPinModal(false);
     setShowPinValues(false);
     setPinSuccess('PIN обновлен');
+    setSettingsSuccess('PIN обновлен');
   };
 
   return (
@@ -373,7 +382,32 @@ export const ProfileScreen = () => {
       <Card>
         <SectionTitle
           title="Профиль"
-          action={<Pill>{currentEmployee.role === 'owner' ? 'Owner' : 'Staff'}</Pill>}
+          action={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                title="Настройки профиля"
+                aria-label="Настройки профиля"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fog text-lg"
+                onClick={() => {
+                  setSettingsError(null);
+                  setSettingsSuccess(null);
+                  setShowSettingsModal(true);
+                }}
+              >
+                ⚙️
+              </button>
+              <button
+                type="button"
+                title="Выйти"
+                aria-label="Выйти"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fog text-lg"
+                onClick={logout}
+              >
+                🚪
+              </button>
+            </div>
+          }
         />
         <div className="space-y-4">
           <div className="rounded-2xl bg-fog p-4">
@@ -386,44 +420,11 @@ export const ProfileScreen = () => {
             <p className="mt-2 text-xs text-ink/45">
               Telegram: {telegramName || 'без имени'}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Pill>{currentEmployee.role === 'owner' ? 'Owner' : 'Staff'}</Pill>
+              <Pill>{resolvedRate ? `${resolvedRate} ₽ / час` : 'Ставка не указана'}</Pill>
+            </div>
           </div>
-          <div>
-            <p className="mb-2 text-sm font-semibold text-ink">Моя ставка</p>
-            {isFixedRate ? (
-              <div className="rounded-2xl bg-fog p-4">
-                <p className="text-lg font-semibold">{presetRate} ₽ / час</p>
-                <p className="mt-1 text-sm text-ink/55">Фиксированная ставка по роли</p>
-              </div>
-            ) : (
-              <div className="flex gap-3">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="Введите ставку"
-                  value={rateInput}
-                  onChange={(event) => setRateInput(event.target.value)}
-                />
-                <button
-                  className="rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white"
-                  onClick={() => void saveRate()}
-                >
-                  Сохранить
-                </button>
-              </div>
-            )}
-          </div>
-          <SecondaryButton onClick={logout}>Выйти</SecondaryButton>
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Служебный PIN" action={<Pill>4–6 цифр</Pill>} />
-        <p className="text-sm text-ink/60">
-          Меняйте PIN здесь, если хотите обновить личный доступ без owner.
-        </p>
-        {pinSuccess ? <p className="mt-3 text-sm text-pine">{pinSuccess}</p> : null}
-        <div className="mt-4">
-          <PrimaryButton onClick={() => setShowPinModal(true)}>Сменить PIN</PrimaryButton>
         </div>
       </Card>
 
@@ -503,10 +504,10 @@ export const ProfileScreen = () => {
       <div className="grid grid-cols-2 gap-3">
         <Card className="bg-white/80">
           <p className="text-xs text-ink/50">Мой прогресс</p>
-          <p className="mt-2 text-2xl font-semibold">{totalPoints} pts</p>
+          <p className="mt-2 text-2xl font-semibold">{totalPoints}</p>
         </Card>
         <Card className="bg-white/80">
-          <p className="text-xs text-ink/50">Принятые миссии</p>
+          <p className="text-xs text-ink/50">Принятые задачи</p>
           <p className="mt-2 text-2xl font-semibold">{acceptedTasks}</p>
         </Card>
         <Card className="bg-white/80">
@@ -578,6 +579,83 @@ export const ProfileScreen = () => {
               >
                 Отмена
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showSettingsModal ? (
+        <div className="fixed inset-0 z-20 flex items-end bg-black/30">
+          <div className="w-full rounded-t-[2rem] bg-white p-5">
+            <SectionTitle title="Настройки профиля" action={<Pill>{getRoleLabel(currentEmployee.role)}</Pill>} />
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-fog p-4">
+                <p className="text-xs text-ink/45">Ставка</p>
+                {isFixedRate ? (
+                  <>
+                    <p className="mt-2 text-lg font-semibold">{presetRate} ₽ / час</p>
+                    <p className="mt-1 text-sm text-ink/55">Фиксированная ставка по роли</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-2 text-sm text-ink/60">
+                      Ставка влияет только на предварительный расчёт дохода.
+                    </p>
+                    <div className="mt-3 flex gap-3">
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Введите ставку"
+                        value={rateInput}
+                        onChange={(event) => setRateInput(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white"
+                        onClick={() => void saveRate()}
+                      >
+                        Сохранить
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="rounded-2xl bg-fog p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-ink/45">Служебный PIN</p>
+                    <p className="mt-1 text-sm text-ink/60">
+                      Меняйте личный PIN здесь, если хотите обновить доступ без owner.
+                    </p>
+                  </div>
+                  <Pill>4–6 цифр</Pill>
+                </div>
+                <div className="mt-3">
+                  <PrimaryButton
+                    onClick={() => {
+                      setPinError(null);
+                      setPinSuccess(null);
+                      setShowPinModal(true);
+                    }}
+                  >
+                    Сменить PIN
+                  </PrimaryButton>
+                </div>
+              </div>
+              {settingsError ? <p className="text-sm text-red-700">{settingsError}</p> : null}
+              {settingsSuccess || pinSuccess ? (
+                <p className="text-sm text-pine">{settingsSuccess ?? pinSuccess}</p>
+              ) : null}
+            </div>
+            <div className="mt-4">
+              <SecondaryButton
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setSettingsError(null);
+                }}
+              >
+                Закрыть
+              </SecondaryButton>
             </div>
           </div>
         </div>

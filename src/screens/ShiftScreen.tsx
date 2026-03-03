@@ -228,7 +228,7 @@ export const ShiftScreen = () => {
         Telegram initDataUnsafe используется только для отображения имени. Это не безопасная
         аутентификация.
       </p>
-      <InlineLink to="/missions">Перейти к миссиям</InlineLink>
+      <InlineLink to="/missions">Перейти к задачам</InlineLink>
     </div>
   );
 };
