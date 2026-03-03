@@ -91,18 +91,40 @@ export const apiClient = {
       method: 'POST',
       body: input,
     }),
-  getLoginEmployees: () =>
-    request<EmployeeListResponse>('/api/employees/public').then(
-      (payload) => payload.employees as EmployeeLoginOption[],
-    ),
-  getEmployees: (token: string, onUnauthorized?: () => void) =>
-    request<EmployeeListResponse>('/api/employees', {
+  logout: (token?: string | null) =>
+    request<{ ok: boolean }>('/api/auth/logout', {
+      method: 'POST',
       token,
-      onUnauthorized,
-    }).then((payload) => payload.employees as Employee[]),
+    }),
+getLoginEmployees: () =>
+  request<EmployeeListResponse>('/api/employees/public').then(
+    (payload) => payload.employees as EmployeeLoginOption[],
+  ),
+  getEmployees: (token: string, includeArchived = false, onUnauthorized?: () => void) =>
+    request<EmployeeListResponse>(
+      `/api/employees${includeArchived ? '?includeArchived=1' : ''}`,
+      {
+        token,
+        onUnauthorized,
+      },
+    ).then((payload) => payload.employees as Employee[]),
   getMe: (token: string, onUnauthorized?: () => void) =>
     request<EmployeeResponse>('/api/me', {
       token,
+      onUnauthorized,
+    }).then((payload) => payload.employee),
+  updateMe: (
+    token: string,
+    input: {
+      hourlyRate?: number | null;
+      tenureLabel?: string | null;
+    },
+    onUnauthorized?: () => void,
+  ) =>
+    request<EmployeeResponse>('/api/me', {
+      method: 'PATCH',
+      token,
+      body: input,
       onUnauthorized,
     }).then((payload) => payload.employee),
   createEmployee: (
@@ -148,16 +170,21 @@ export const apiClient = {
     pin: string,
     onUnauthorized?: () => void,
   ) =>
-    request<{ ok: boolean }>(`/api/employees/${employeeId}/reset-pin`, {
+    request<EmployeeResponse>(`/api/employees/${employeeId}/reset-pin`, {
       method: 'POST',
       token,
       body: { pin },
       onUnauthorized,
-    }),
+    }).then((payload) => payload.employee),
   deactivateEmployee: (token: string, employeeId: string, onUnauthorized?: () => void) =>
-    request<{ ok: boolean }>(`/api/employees/${employeeId}`, {
+    request<EmployeeResponse>(`/api/employees/${employeeId}`, {
       method: 'DELETE',
       token,
       onUnauthorized,
-    }),
+    }).then((payload) => payload.employee),
 };
+cd ~/Desktop/EtnaStaff
+git add .
+git commit -m "Fix login employees endpoint"
+git push
+
