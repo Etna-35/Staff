@@ -257,7 +257,11 @@ export const ProfileScreen = () => {
   );
   const weeklyHours = getEntriesHours(weekEntries);
   const resolvedRate = getProfileRate(currentEmployee);
-  const estimatedIncome = calcEarnings(monthEntries, resolvedRate);
+  const monthlyShiftIncome = calcEarnings(monthEntries, resolvedRate);
+  const monthlyTaskRewards = 0;
+  const monthlyOwnerBonuses = 0;
+  const monthlyIncomeEstimate =
+    monthlyShiftIncome + monthlyTaskRewards + monthlyOwnerBonuses;
   const todayEarned = calcEarnings(todayClosedEntries, resolvedRate);
   const isFixedRate =
     currentEmployee.role === 'waiter' || currentEmployee.role === 'bartender';
@@ -355,12 +359,20 @@ export const ProfileScreen = () => {
             </button>
           }
         />
-        <StatValue value={`${estimatedIncome.toFixed(0)} ₽`} visible={earningsVisible} />
-      </Card>
-
-      <Card>
-        <SectionTitle title="Сегодня заработано" />
-        <StatValue value={`${todayEarned.toFixed(0)} ₽`} visible={earningsVisible} />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-fog p-4">
+            <p className="text-xs text-ink/50">Сегодня</p>
+            <div className="mt-2">
+              <StatValue value={`${todayEarned.toFixed(0)} ₽`} visible={earningsVisible} />
+            </div>
+          </div>
+          <div className="rounded-2xl bg-fog p-4">
+            <p className="text-xs text-ink/50">За месяц</p>
+            <div className="mt-2">
+              <StatValue value={`${monthlyIncomeEstimate.toFixed(0)} ₽`} visible={earningsVisible} />
+            </div>
+          </div>
+        </div>
       </Card>
 
       <div className="grid grid-cols-2 gap-3">
