@@ -19,10 +19,16 @@ const roleOptions: { value: Exclude<EmployeeRole, 'owner'>; label: string }[] = 
   { value: 'chef', label: 'Повар' },
 ];
 
+const getEmployeeMetaLabel = (employee: Pick<Employee, 'positionTitle' | 'role'>) => {
+  const roleLabel = getRoleLabel(employee.role);
+  const positionTitle = employee.positionTitle.trim();
+
+  return positionTitle === roleLabel ? roleLabel : `${positionTitle} · ${roleLabel}`;
+};
+
 type AddFormState = {
   fullName: string;
   role: Exclude<EmployeeRole, 'owner'>;
-  positionTitle: string;
   pin: string;
   confirmPin: string;
   hourlyRate: string;
@@ -31,7 +37,6 @@ type AddFormState = {
 const emptyAddForm: AddFormState = {
   fullName: '',
   role: 'waiter',
-  positionTitle: 'Официант',
   pin: '',
   confirmPin: '',
   hourlyRate: '',
@@ -103,7 +108,7 @@ export const EmployeesScreen = () => {
     const result = await createEmployee({
       fullName: addForm.fullName,
       role: addForm.role,
-      positionTitle: addForm.positionTitle,
+      positionTitle: getRoleLabel(addForm.role),
       pin: addForm.pin,
       hourlyRate: addForm.role === 'chef' ? Number(addForm.hourlyRate) || null : null,
     });
@@ -127,7 +132,7 @@ export const EmployeesScreen = () => {
     const result = await updateEmployee(editingEmployee.id, {
       fullName: editingEmployee.fullName,
       role: editingEmployee.role,
-      positionTitle: editingEmployee.positionTitle,
+      positionTitle: getRoleLabel(editingEmployee.role),
       isActive: editingEmployee.isActive,
       hourlyRate: editingEmployee.hourlyRate,
       tenureLabel: editingEmployee.tenureLabel ?? null,
@@ -217,7 +222,6 @@ export const EmployeesScreen = () => {
               setAddForm((current) => ({
                 ...current,
                 role: event.target.value as Exclude<EmployeeRole, 'owner'>,
-                positionTitle: getRoleLabel(event.target.value as Exclude<EmployeeRole, 'owner'>),
               }))
             }
           >
@@ -227,13 +231,9 @@ export const EmployeesScreen = () => {
               </option>
             ))}
           </Select>
-          <Input
-            placeholder="Должность"
-            value={addForm.positionTitle}
-            onChange={(event) =>
-              setAddForm((current) => ({ ...current, positionTitle: event.target.value }))
-            }
-          />
+          <div className="rounded-2xl bg-fog px-4 py-3 text-sm text-ink/65">
+            Должность подставится автоматически по выбранной роли.
+          </div>
           {addForm.role === 'chef' ? (
             <Input
               type="number"
@@ -282,9 +282,7 @@ export const EmployeesScreen = () => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold">{employee.fullName}</p>
-                  <p className="text-sm text-ink/55">
-                    {employee.positionTitle} · {getRoleLabel(employee.role)}
-                  </p>
+                  <p className="text-sm text-ink/55">{getEmployeeMetaLabel(employee)}</p>
                 </div>
                 <Pill>{employee.hasPin ? 'PIN задан' : 'Без PIN'}</Pill>
               </div>
@@ -332,9 +330,7 @@ export const EmployeesScreen = () => {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold">{employee.fullName}</p>
-                    <p className="text-sm text-ink/55">
-                      {employee.positionTitle} · {getRoleLabel(employee.role)}
-                    </p>
+                    <p className="text-sm text-ink/55">{getEmployeeMetaLabel(employee)}</p>
                   </div>
                   <Pill tone="danger">Архив</Pill>
                 </div>
@@ -378,6 +374,7 @@ export const EmployeesScreen = () => {
                       ? {
                           ...current,
                           role: event.target.value as EmployeeRole,
+                          positionTitle: getRoleLabel(event.target.value as EmployeeRole),
                         }
                       : current,
                   )
@@ -388,19 +385,9 @@ export const EmployeesScreen = () => {
                 <option value="chef">Повар</option>
                 <option value="owner">Owner</option>
               </Select>
-              <Input
-                value={editingEmployee.positionTitle}
-                onChange={(event) =>
-                  setEditingEmployee((current) =>
-                    current
-                      ? {
-                          ...current,
-                          positionTitle: event.target.value,
-                        }
-                      : current,
-                  )
-                }
-              />
+              <div className="rounded-2xl bg-fog px-4 py-3 text-sm text-ink/65">
+                Должность синхронизируется с выбранной ролью: {getRoleLabel(editingEmployee.role)}
+              </div>
               {editingEmployee.role === 'chef' || editingEmployee.role === 'owner' ? (
                 <Input
                   type="number"
