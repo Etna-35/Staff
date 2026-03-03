@@ -36,6 +36,8 @@ const periodLabels: Record<TimesheetPeriod, string> = {
   month: 'Месяц',
 };
 
+const normalizeAssignee = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
+
 const StatValue = ({
   value,
   visible,
@@ -242,10 +244,13 @@ export const ProfileScreen = () => {
     return null;
   }
 
-  const acceptedTasks = tasks.filter((task) => task.status === 'accepted').length;
-  const waitingTasks = tasks.filter((task) => task.status === 'done').length;
-  const overdueTasks = tasks.filter((task) => task.status === 'returned').length;
-  const totalPoints = tasks
+  const myTasks = tasks.filter(
+    (task) => normalizeAssignee(task.assignee) === normalizeAssignee(currentEmployee.fullName),
+  );
+  const acceptedTasks = myTasks.filter((task) => task.status === 'accepted').length;
+  const waitingTasks = myTasks.filter((task) => task.status === 'done').length;
+  const overdueTasks = myTasks.filter((task) => task.status === 'returned').length;
+  const totalPoints = myTasks
     .filter((task) => task.status === 'accepted')
     .reduce((sum, task) => sum + task.points, 0);
   const weeklyLoss = losses.spoilage + losses.staffMeal;
