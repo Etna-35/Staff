@@ -77,6 +77,7 @@ type Store = AppState & {
   logout: () => void;
   loadEmployees: () => Promise<void>;
   setHourlyRate: (rate: number | null) => Promise<ActionResult>;
+  changeMyPin: (currentPin: string, newPin: string) => Promise<ActionResult>;
   createEmployee: (input: EmployeeDraft) => Promise<ActionResult>;
   updateEmployee: (employeeId: string, updates: EmployeeUpdate) => Promise<ActionResult>;
   resetEmployeePin: (employeeId: string, pin: string) => Promise<ActionResult>;
@@ -470,6 +471,49 @@ export const useAppStore = create<Store>()(
         }));
 
         return { ok: true };
+      },
+      changeMyPin: async (currentPin, newPin) => {
+        const token = getSessionToken(get());
+
+        if (!token || !getSessionMe(get())) {
+          return {
+            ok: false,
+            reason: 'Сначала войдите по PIN',
+          };
+        }
+
+        if (!isValidPinFormat(currentPin)) {
+          return {
+            ok: false,
+            reason: 'Текущий PIN должен быть 4–6 цифр',
+          };
+        }
+
+        if (!isValidPinFormat(newPin)) {
+          return {
+            ok: false,
+            reason: 'Новый PIN должен быть 4–6 цифр',
+          };
+        }
+
+        try {
+          await apiClient.changeMyPin(
+            token,
+            {
+              currentPin,
+              newPin,
+            },
+            () => get().logout(),
+          );
+
+          set({ authError: null });
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason: error instanceof ApiError ? error.message : 'Не удалось сменить PIN',
+          };
+        }
       },
       createEmployee: async (input) => {
         const token = getSessionToken(get());

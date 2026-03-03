@@ -110,6 +110,20 @@ export const apiClient = {
       token,
       onUnauthorized,
     }).then((payload) => payload.employee),
+  changeMyPin: (
+    token: string,
+    input: {
+      currentPin: string;
+      newPin: string;
+    },
+    onUnauthorized?: () => void,
+  ) =>
+    request<{ ok: boolean }>('/api/me/change-pin', {
+      method: 'POST',
+      token,
+      body: input,
+      onUnauthorized,
+    }),
   getEmployees: (token: string, onUnauthorized?: () => void) =>
     request<EmployeeListResponse>('/api/employees', {
       token,

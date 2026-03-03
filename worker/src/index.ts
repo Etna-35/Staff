@@ -320,6 +320,44 @@ export default {
       return withCors(request, env, json({ ok: true, employee: toPublic(emp) }));
     }
 
+    if (request.method === "POST" && path === "/api/me/change-pin") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const body = await readJson<{ currentPin: string; newPin: string }>(request);
+      if (!body) return withCors(request, env, badRequest("Expected JSON body"));
+
+      const currentPin = (body.currentPin || "").trim();
+      const newPin = (body.newPin || "").trim();
+
+      if (!isValidPin(currentPin)) {
+        return withCors(request, env, badRequest("Current PIN must be 4-6 digits"));
+      }
+
+      if (!isValidPin(newPin)) {
+        return withCors(request, env, badRequest("New PIN must be 4-6 digits"));
+      }
+
+      const currentHash = await sha256Hex(currentPin + emp.pinSalt);
+      if (currentHash !== emp.pinHash) {
+        return withCors(request, env, badRequest("Current PIN is incorrect"));
+      }
+
+      const nextSalt = randomId("salt");
+      const nextHash = await sha256Hex(newPin + nextSalt);
+
+      await putEmployee(env, {
+        ...emp,
+        pinSalt: nextSalt,
+        pinHash: nextHash,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return withCors(request, env, json({ ok: true }));
+    }
+
     // Owner-only list
     if (request.method === "GET" && path === "/api/employees") {
       if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());

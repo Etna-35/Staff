@@ -33,6 +33,7 @@ import {
 } from '../components/ui';
 
 const revealDurationMs = 12_000;
+const sanitizePin = (value: string) => value.replace(/\D/g, '').slice(0, 6);
 
 const periodLabels: Record<TimesheetPeriod, string> = {
   day: 'Сегодня',
@@ -204,6 +205,7 @@ export const ProfileScreen = () => {
     telegramName,
     timeEntries,
     setHourlyRate,
+    changeMyPin,
     startTimeEntry,
     endCurrentTimeEntry,
     logout,
@@ -217,6 +219,14 @@ export const ProfileScreen = () => {
   const [shortShiftPrompt, setShortShiftPrompt] = useState(false);
   const [entryError, setEntryError] = useState<string | null>(null);
   const [earningsVisible, setEarningsVisible] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmNewPin, setConfirmNewPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSaving, setPinSaving] = useState(false);
+  const [showPinValues, setShowPinValues] = useState(false);
+  const [pinSuccess, setPinSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     setRateInput(currentEmployee?.hourlyRate?.toString() ?? '');
@@ -322,6 +332,37 @@ export const ProfileScreen = () => {
     setShortShiftPrompt(false);
   };
 
+  const submitPinChange = async () => {
+    setPinError(null);
+    setPinSuccess(null);
+
+    if (newPin !== confirmNewPin) {
+      setPinError('Новый PIN и подтверждение не совпадают');
+      return;
+    }
+
+    if (currentPin === newPin) {
+      setPinError('Новый PIN должен отличаться от текущего');
+      return;
+    }
+
+    setPinSaving(true);
+    const result = await changeMyPin(currentPin, newPin);
+    setPinSaving(false);
+
+    if (!result.ok) {
+      setPinError(result.reason ?? 'Не удалось сменить PIN');
+      return;
+    }
+
+    setCurrentPin('');
+    setNewPin('');
+    setConfirmNewPin('');
+    setShowPinModal(false);
+    setShowPinValues(false);
+    setPinSuccess('PIN обновлен');
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -372,6 +413,17 @@ export const ProfileScreen = () => {
             )}
           </div>
           <SecondaryButton onClick={logout}>Выйти</SecondaryButton>
+        </div>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Служебный PIN" action={<Pill>4–6 цифр</Pill>} />
+        <p className="text-sm text-ink/60">
+          Меняйте PIN здесь, если хотите обновить личный доступ без owner.
+        </p>
+        {pinSuccess ? <p className="mt-3 text-sm text-pine">{pinSuccess}</p> : null}
+        <div className="mt-4">
+          <PrimaryButton onClick={() => setShowPinModal(true)}>Сменить PIN</PrimaryButton>
         </div>
       </Card>
 
@@ -522,6 +574,62 @@ export const ProfileScreen = () => {
                 onClick={() => {
                   setShowEarlyStartModal(false);
                   setEarlyReason('');
+                }}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showPinModal ? (
+        <div className="fixed inset-0 z-20 flex items-end bg-black/30">
+          <div className="w-full rounded-t-[2rem] bg-white p-5">
+            <SectionTitle title="Сменить PIN" action={<Pill>Личный доступ</Pill>} />
+            <div className="space-y-3">
+              <Input
+                type={showPinValues ? 'text' : 'password'}
+                inputMode="numeric"
+                placeholder="Текущий PIN"
+                value={currentPin}
+                onChange={(event) => setCurrentPin(sanitizePin(event.target.value))}
+              />
+              <Input
+                type={showPinValues ? 'text' : 'password'}
+                inputMode="numeric"
+                placeholder="Новый PIN"
+                value={newPin}
+                onChange={(event) => setNewPin(sanitizePin(event.target.value))}
+              />
+              <Input
+                type={showPinValues ? 'text' : 'password'}
+                inputMode="numeric"
+                placeholder="Повторите новый PIN"
+                value={confirmNewPin}
+                onChange={(event) => setConfirmNewPin(sanitizePin(event.target.value))}
+              />
+              <button
+                className="text-sm font-semibold text-clay"
+                onClick={() => setShowPinValues((value) => !value)}
+              >
+                {showPinValues ? '🙈 Скрыть' : '👁 Показать'}
+              </button>
+              {pinError ? <p className="text-sm text-red-700">{pinError}</p> : null}
+            </div>
+            <div className="mt-4 flex gap-3">
+              <PrimaryButton disabled={pinSaving} onClick={() => void submitPinChange()}>
+                Сохранить новый PIN
+              </PrimaryButton>
+              <button
+                className="rounded-2xl border border-ink/10 px-4 py-3 text-sm font-semibold"
+                onClick={() => {
+                  setShowPinModal(false);
+                  setCurrentPin('');
+                  setNewPin('');
+                  setConfirmNewPin('');
+                  setPinError(null);
+                  setShowPinValues(false);
                 }}
               >
                 Отмена
