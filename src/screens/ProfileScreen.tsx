@@ -255,12 +255,15 @@ export const ProfileScreen = () => {
     .reduce((sum, task) => sum + task.points, 0);
   const weeklyLoss = losses.spoilage + losses.staffMeal;
   const myEntries = timeEntries.filter((entry) => entry.userId === currentEmployee.id);
+  const todayEntries = getEntriesForPeriod(myEntries, 'day');
   const weekEntries = getEntriesForPeriod(myEntries, 'week');
   const monthEntries = getEntriesForPeriod(myEntries, 'month');
   const todayClosedEntries = myEntries.filter(
     (entry) => entry.endAt && isSameDay(new Date(entry.endAt), new Date()),
   );
+  const todayHours = getEntriesHours(todayEntries);
   const weeklyHours = getEntriesHours(weekEntries);
+  const monthlyHours = getEntriesHours(monthEntries);
   const resolvedRate = getProfileRate(currentEmployee);
   const monthlyShiftIncome = calcEarnings(monthEntries, resolvedRate);
   const monthlyTaskRewards = 0;
@@ -376,6 +379,20 @@ export const ProfileScreen = () => {
             <div className="mt-2">
               <StatValue value={`${monthlyIncomeEstimate.toFixed(0)} ₽`} visible={earningsVisible} />
             </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Учет часов" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-fog p-4">
+            <p className="text-xs text-ink/50">Сегодня</p>
+            <p className="mt-2 text-2xl font-semibold">{todayHours.toFixed(1)} ч</p>
+          </div>
+          <div className="rounded-2xl bg-fog p-4">
+            <p className="text-xs text-ink/50">За месяц</p>
+            <p className="mt-2 text-2xl font-semibold">{monthlyHours.toFixed(1)} ч</p>
           </div>
         </div>
       </Card>

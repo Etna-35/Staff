@@ -6,8 +6,6 @@ import { durationHours, formatDuration, isBeforeShiftStart } from '../lib/timeTr
 import {
   getCurrentActiveEntry,
   getCurrentEmployee,
-  getEntriesForPeriod,
-  getEntriesHours,
   getVisibleStageKeys,
   useAppStore,
 } from '../store/useAppStore';
@@ -18,7 +16,6 @@ import {
   Pill,
   PrimaryButton,
   ProgressBar,
-  SecondaryButton,
   SectionTitle,
   ShellHeader,
 } from '../components/ui';
@@ -53,7 +50,6 @@ export const ShiftScreen = () => {
     setTelegramName,
     shift,
     losses,
-    timeEntries,
     handoffItems,
     completeStage,
     startTimeEntry,
@@ -107,10 +103,13 @@ export const ShiftScreen = () => {
 
   const completedCount = stages.filter((stage) => stage.done).length;
   const progress = Math.round((completedCount / stages.length) * 100);
-  const acceptedTasksCount = tasks.filter((task) => task.status === 'accepted').length;
-  const myEntries = timeEntries.filter((entry) => entry.userId === currentEmployee?.id);
-  const weeklyHours = getEntriesHours(getEntriesForPeriod(myEntries, 'week'));
-  const monthlyHours = getEntriesHours(getEntriesForPeriod(myEntries, 'month'));
+  const normalizeAssignee = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
+  const myTasks = currentEmployee
+    ? tasks.filter(
+        (task) => normalizeAssignee(task.assignee) === normalizeAssignee(currentEmployee.fullName),
+      )
+    : [];
+  const acceptedTasksCount = myTasks.filter((task) => task.status === 'accepted').length;
   const workedNowLabel = activeEntry
     ? formatDuration(durationHours(activeEntry.startAt, null))
     : null;
@@ -161,57 +160,43 @@ export const ShiftScreen = () => {
     <div className="space-y-4 pt-3">
       <ShellHeader
         name={currentEmployee?.fullName ?? telegramName}
-        subtitle={currentEmployee?.positionTitle ?? 'Сотрудник'}
+        action={
+          activeEntry ? (
+            <button
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-ink"
+              onClick={() => onEndShift()}
+            >
+              Закончить смену
+            </button>
+          ) : (
+            <button
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-ink"
+              onClick={onStartShift}
+            >
+              Начать смену
+            </button>
+          )
+        }
       />
 
-      <Card>
-        <SectionTitle
-          title="Табель"
-          action={
-            <Link className="text-sm font-semibold text-clay" to="/profile/timesheet">
-              Открыть
-            </Link>
-          }
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-fog p-3">
-            <p className="text-xs text-ink/45">Неделя</p>
-            <p className="mt-2 text-xl font-semibold">{weeklyHours.toFixed(1)} ч</p>
-          </div>
-          <div className="rounded-2xl bg-fog p-3">
-            <p className="text-xs text-ink/45">Месяц</p>
-            <p className="mt-2 text-xl font-semibold">{monthlyHours.toFixed(1)} ч</p>
-          </div>
-        </div>
-        {activeEntry ? (
-          <div className="mt-4 rounded-2xl border border-clay/30 bg-clay/10 p-4">
-            <p className="font-semibold text-ink">У вас открыта смена</p>
-            <p className="mt-1 text-sm text-ink/60">
-              Идет {workedNowLabel} · старт{' '}
-              {new Date(activeEntry.startAt).toLocaleTimeString('ru-RU', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
-            <div className="mt-3 flex gap-3">
-              <PrimaryButton className="flex-1" onClick={() => onEndShift()}>
-                Закрыть сейчас
-              </PrimaryButton>
-              <SecondaryButton className="flex-1" onClick={() => setEntryError(null)}>
-                Продолжить
-              </SecondaryButton>
-            </div>
-          </div>
-        ) : null}
-        <div className="mt-4 space-y-3">
-          {activeEntry ? (
-            <PrimaryButton onClick={() => onEndShift()}>Закончить смену</PrimaryButton>
-          ) : (
-            <PrimaryButton onClick={onStartShift}>Начать смену</PrimaryButton>
-          )}
-          {entryError ? <p className="text-sm text-red-700">{entryError}</p> : null}
-        </div>
-      </Card>
+      {activeEntry ? (
+        <Card className="bg-clay/10">
+          <p className="font-semibold text-ink">Смена открыта</p>
+          <p className="mt-1 text-sm text-ink/60">
+            Идет {workedNowLabel} · старт{' '}
+            {new Date(activeEntry.startAt).toLocaleTimeString('ru-RU', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </p>
+        </Card>
+      ) : null}
+
+      {entryError ? (
+        <Card className="bg-red-50">
+          <p className="text-sm font-semibold text-red-700">{entryError}</p>
+        </Card>
+      ) : null}
 
       <Card className="space-y-4 bg-gradient-to-br from-white to-[#fff5dd]">
         <ProgressBar value={shift.closedAt ? 100 : progress} />
@@ -225,7 +210,7 @@ export const ShiftScreen = () => {
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Задачи</p>
             <p className="mt-1 text-xl font-semibold text-ink">
-              {acceptedTasksCount}/{tasks.length}
+              {acceptedTasksCount}/{myTasks.length}
             </p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3">

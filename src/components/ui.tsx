@@ -144,19 +144,21 @@ export const Select = ({
 export const ShellHeader = ({
   name,
   subtitle,
+  action,
 }: {
   name: string;
-  subtitle: string;
+  subtitle?: string;
+  action?: ReactNode;
 }) => (
   <div className="mb-4 rounded-[2rem] bg-ink px-5 py-5 text-white shadow-card">
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-sm text-white/65">{subtitle}</p>
-        <h1 className="mt-2 font-display text-2xl font-semibold">{name}</h1>
+        {subtitle ? <p className="text-sm text-white/65">{subtitle}</p> : null}
+        <h1 className={clsx('font-display text-2xl font-semibold', subtitle ? 'mt-2' : '')}>
+          {name}
+        </h1>
       </div>
-      <div className="mt-1 flex h-12 w-24 shrink-0 items-center justify-center p-2">
-        <img src="/etna-mark.svg" alt="Etna" className="h-full w-full object-contain" />
-      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   </div>
 );
