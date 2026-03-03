@@ -8,7 +8,6 @@ import {
   getCurrentEmployee,
   getEntriesForPeriod,
   getEntriesHours,
-  getNormalShiftLabel,
   getVisibleStageKeys,
   useAppStore,
 } from '../store/useAppStore';
@@ -57,9 +56,9 @@ export const ShiftScreen = () => {
     timeEntries,
     handoffItems,
     completeStage,
-    closeShift,
     startTimeEntry,
     endCurrentTimeEntry,
+    tasks,
   } = useAppStore();
   const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
@@ -108,7 +107,7 @@ export const ShiftScreen = () => {
 
   const completedCount = stages.filter((stage) => stage.done).length;
   const progress = Math.round((completedCount / stages.length) * 100);
-  const canClose = completedCount === stages.length && !shift.closedAt;
+  const acceptedTasksCount = tasks.filter((task) => task.status === 'accepted').length;
   const myEntries = timeEntries.filter((entry) => entry.userId === currentEmployee?.id);
   const weeklyHours = getEntriesHours(getEntriesForPeriod(myEntries, 'week'));
   const monthlyHours = getEntriesHours(getEntriesForPeriod(myEntries, 'month'));
@@ -205,10 +204,6 @@ export const ShiftScreen = () => {
           </div>
         ) : null}
         <div className="mt-4 space-y-3">
-          <div className="rounded-2xl bg-white/80 p-4">
-            <p className="text-xs text-ink/45">График</p>
-            <p className="mt-2 text-lg font-semibold">{getNormalShiftLabel()}</p>
-          </div>
           {activeEntry ? (
             <PrimaryButton onClick={() => onEndShift()}>Закончить смену</PrimaryButton>
           ) : (
@@ -222,21 +217,26 @@ export const ShiftScreen = () => {
         <ProgressBar value={shift.closedAt ? 100 : progress} />
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-white/70 p-3">
-            <p className="text-xs text-ink/55">Этапов закрыто</p>
+            <p className="text-xs text-ink/55">Этапы</p>
             <p className="mt-1 text-xl font-semibold text-ink">
               {completedCount}/{stages.length}
             </p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3">
-            <p className="text-xs text-ink/55">Статус</p>
+            <p className="text-xs text-ink/55">Задачи</p>
             <p className="mt-1 text-xl font-semibold text-ink">
-              {shift.closedAt ? 'Смена закрыта' : 'В процессе'}
+              {acceptedTasksCount}/{tasks.length}
             </p>
           </div>
+          <div className="rounded-2xl bg-white/70 p-3">
+            <p className="text-xs text-ink/55">Командный зачот</p>
+            <p className="mt-1 text-xl font-semibold text-ink">Скоро</p>
+          </div>
+          <div className="rounded-2xl bg-white/70 p-3">
+            <p className="text-xs text-ink/55">Личный зачот</p>
+            <p className="mt-1 text-xl font-semibold text-ink">Скоро</p>
+          </div>
         </div>
-        <PrimaryButton disabled={!canClose} onClick={closeShift}>
-          {shift.closedAt ? 'Смена закрыта' : 'Закрыть смену'}
-        </PrimaryButton>
       </Card>
 
       <div>
