@@ -150,17 +150,7 @@ export const ShellHeader = ({
 }) => (
   <div className="mb-4 rounded-[2rem] bg-ink px-5 py-5 text-white shadow-card">
     <p className="text-sm text-white/65">{subtitle}</p>
-    <div className="mt-2 flex items-end justify-between gap-3">
-      <div>
-        <h1 className="font-display text-2xl font-semibold">{name}</h1>
-        <p className="text-sm text-white/65">
-          Telegram имя показано из `initDataUnsafe.user`
-        </p>
-      </div>
-      <div className="rounded-2xl bg-white/10 px-3 py-2 text-xs uppercase tracking-[0.2em]">
-        shift
-      </div>
-    </div>
+    <h1 className="mt-2 font-display text-2xl font-semibold">{name}</h1>
   </div>
 );
 

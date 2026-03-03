@@ -159,10 +159,10 @@ export const ShiftScreen = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pt-3">
       <ShellHeader
         name={currentEmployee?.fullName ?? telegramName}
-        subtitle={`${shift.dayLabel} · ${currentEmployee?.positionTitle ?? 'Сотрудник'}`}
+        subtitle={currentEmployee?.positionTitle ?? 'Сотрудник'}
       />
 
       <Card className="space-y-4 bg-gradient-to-br from-white to-[#fff5dd]">
@@ -227,7 +227,7 @@ export const ShiftScreen = () => {
         ) : null}
         <div className="mt-4 space-y-3">
           <div className="rounded-2xl bg-white/80 p-4">
-            <p className="text-xs text-ink/45">Нормальная смена</p>
+            <p className="text-xs text-ink/45">График</p>
             <p className="mt-2 text-lg font-semibold">{getNormalShiftLabel()}</p>
           </div>
           {activeEntry ? (
@@ -399,10 +399,6 @@ export const ShiftScreen = () => {
         </div>
       ) : null}
 
-      <p className="text-center text-xs text-ink/45">
-        Telegram initDataUnsafe используется только для отображения имени. Это не безопасная
-        аутентификация.
-      </p>
       <InlineLink to="/missions">Перейти к задачам</InlineLink>
     </div>
   );
