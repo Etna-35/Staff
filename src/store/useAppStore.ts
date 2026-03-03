@@ -208,12 +208,21 @@ export const useAppStore = create<Store>()(
             (employee) => employee.id === state.session.employeeId,
           );
 
+          const alreadyCleared =
+            !state.session.isAuthenticated &&
+            state.session.employeeId === null &&
+            state.session.lastAuthAt === null;
+
           if (
             !state.session.isAuthenticated ||
             !currentEmployee ||
             !currentEmployee.isActive ||
             !currentEmployee.pinHash
           ) {
+            if (alreadyCleared) {
+              return state;
+            }
+
             return {
               session: {
                 ...state.session,

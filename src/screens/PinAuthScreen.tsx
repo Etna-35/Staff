@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  getActiveEmployees,
   getOwnerWithoutPin,
   useAppStore,
 } from '../store/useAppStore';
@@ -37,7 +36,10 @@ export const PinAuthScreen = () => {
     setupOwnerPin,
   } = useAppStore();
   const ownerWithoutPin = useAppStore(getOwnerWithoutPin);
-  const activeEmployees = useAppStore(getActiveEmployees);
+  const activeEmployees = useMemo(
+    () => employees.filter((employee) => employee.isActive),
+    [employees],
+  );
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -206,4 +208,3 @@ export const PinAuthScreen = () => {
     </Screen>
   );
 };
-

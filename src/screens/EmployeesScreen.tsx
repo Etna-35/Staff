@@ -1,7 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  getArchivedEmployees,
   getCurrentEmployee,
   getRoleLabel,
   useAppStore,
@@ -52,7 +51,6 @@ export const EmployeesScreen = () => {
     deactivateEmployee,
   } = useAppStore();
   const currentEmployee = useAppStore(getCurrentEmployee);
-  const archivedEmployees = useAppStore(getArchivedEmployees);
   const [addForm, setAddForm] = useState<AddFormState>(emptyAddForm);
   const [error, setError] = useState<string | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -62,6 +60,10 @@ export const EmployeesScreen = () => {
 
   const activeEmployees = useMemo(
     () => employees.filter((employee) => employee.isActive),
+    [employees],
+  );
+  const archivedEmployees = useMemo(
+    () => employees.filter((employee) => !employee.isActive),
     [employees],
   );
 
