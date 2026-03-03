@@ -154,11 +154,9 @@ export const ShellHeader = ({
         <p className="text-sm text-white/65">{subtitle}</p>
         <h1 className="mt-2 font-display text-2xl font-semibold">{name}</h1>
       </div>
-      <img
-        src="/etna-mark.svg"
-        alt="Etna"
-        className="mt-1 h-9 w-auto shrink-0 opacity-95"
-      />
+      <div className="mt-1 flex h-12 w-24 shrink-0 items-center justify-center rounded-2xl bg-[#f7ecd2] p-2">
+        <img src="/etna-mark.svg" alt="Etna" className="h-full w-full object-contain" />
+      </div>
     </div>
   </div>
 );
