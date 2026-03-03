@@ -197,7 +197,6 @@ export const ProfileScreen = () => {
     tasks,
     losses,
     resetDemo,
-    telegramName,
     timeEntries,
     setHourlyRate,
     changeMyPin,
@@ -316,57 +315,31 @@ export const ProfileScreen = () => {
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-sm text-ink/55">Профиль</p>
-        <h1 className="font-display text-2xl font-semibold">Мой пульт смены</h1>
-      </div>
-
-      <Card>
-        <SectionTitle
-          title="Профиль"
-          action={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                title="Настройки профиля"
-                aria-label="Настройки профиля"
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fog text-lg"
-                onClick={() => {
-                  setSettingsError(null);
-                  setSettingsSuccess(null);
-                  setShowSettingsModal(true);
-                }}
-              >
-                ⚙️
-              </button>
-              <button
-                type="button"
-                title="Выйти"
-                aria-label="Выйти"
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fog text-lg"
-                onClick={logout}
-              >
-                🚪
-              </button>
-            </div>
-          }
-        />
-        <div className="space-y-4">
-          <div className="rounded-2xl bg-fog p-4">
-            <p className="text-xs text-ink/45">Имя</p>
-            <p className="mt-2 text-xl font-semibold">{currentEmployee.fullName}</p>
-            <p className="mt-1 text-sm text-ink/55">
-              {getRoleLabel(currentEmployee.role)} · {currentEmployee.positionTitle}
-              {currentEmployee.tenureLabel ? ` · стаж ${currentEmployee.tenureLabel}` : ''}
-            </p>
-            <p className="mt-2 text-xs text-ink/45">
-              Telegram: {telegramName || 'без имени'}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Pill>{currentEmployee.role === 'owner' ? 'Owner' : 'Staff'}</Pill>
-              <Pill>{resolvedRate ? `${resolvedRate} ₽ / час` : 'Ставка не указана'}</Pill>
-            </div>
-          </div>
+      <Card className="flex items-center justify-between gap-3">
+        <p className="min-w-0 text-xl font-semibold">{currentEmployee.fullName}</p>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            title="Настройки профиля"
+            aria-label="Настройки профиля"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fog text-lg"
+            onClick={() => {
+              setSettingsError(null);
+              setSettingsSuccess(null);
+              setShowSettingsModal(true);
+            }}
+          >
+            ⚙️
+          </button>
+          <button
+            type="button"
+            title="Выйти"
+            aria-label="Выйти"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fog text-lg"
+            onClick={logout}
+          >
+            🚪
+          </button>
         </div>
       </Card>
 
