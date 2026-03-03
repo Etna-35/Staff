@@ -42,27 +42,38 @@ export const RequestsScreen = () => {
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [overLimitConfirmed, setOverLimitConfirmed] = useState(false);
+  const [selectedMainCategoryId, setSelectedMainCategoryId] = useState(
+    kitchenRequestCatalogDemo[0]?.id ?? '',
+  );
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState(
-    kitchenRequestCatalogDemo.subcategories[0]?.id ?? '',
+    kitchenRequestCatalogDemo[0]?.subcategories[0]?.id ?? '',
   );
   const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
 
+  const selectedMainCategory =
+    kitchenRequestCatalogDemo.find((entry) => entry.id === selectedMainCategoryId) ??
+    kitchenRequestCatalogDemo[0];
+
   const catalogProducts = useMemo(
     () =>
-      kitchenRequestCatalogDemo.subcategories.flatMap((subcategory) =>
-        subcategory.products.map((product) => ({
-          ...product,
-          subcategoryId: subcategory.id,
-          subcategoryLabel: subcategory.label,
-          subcategoryIcon: subcategory.icon,
-        })),
+      kitchenRequestCatalogDemo.flatMap((mainCategory) =>
+        mainCategory.subcategories.flatMap((subcategory) =>
+          subcategory.products.map((product) => ({
+            ...product,
+            mainCategoryId: mainCategory.id,
+            mainCategoryLabel: mainCategory.label,
+            subcategoryId: subcategory.id,
+            subcategoryLabel: subcategory.label,
+            subcategoryIcon: subcategory.icon,
+          })),
+        ),
       ),
     [],
   );
 
   const selectedSubcategory =
-    kitchenRequestCatalogDemo.subcategories.find((entry) => entry.id === selectedSubcategoryId) ??
-    kitchenRequestCatalogDemo.subcategories[0];
+    selectedMainCategory?.subcategories.find((entry) => entry.id === selectedSubcategoryId) ??
+    selectedMainCategory?.subcategories[0];
 
   const selectedItems = useMemo(
     () =>
@@ -124,6 +135,21 @@ export const RequestsScreen = () => {
       setShowSummary(false);
     }
   }, [category]);
+
+  useEffect(() => {
+    if (!selectedMainCategory) {
+      setSelectedSubcategoryId('');
+      return;
+    }
+
+    const firstSubcategoryId = selectedMainCategory.subcategories[0]?.id ?? '';
+
+    setSelectedSubcategoryId((current) =>
+      selectedMainCategory.subcategories.some((entry) => entry.id === current)
+        ? current
+        : firstSubcategoryId,
+    );
+  }, [selectedMainCategory]);
 
   useEffect(() => {
     setOverLimitConfirmed(false);
@@ -232,81 +258,100 @@ export const RequestsScreen = () => {
         <>
           <Card>
             <SectionTitle title="Кухня · тест каталога" action={<Pill>Demo</Pill>} />
-            <div className="rounded-2xl bg-fog p-4">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">{kitchenRequestCatalogDemo.icon}</span>
-                <p className="font-semibold">{kitchenRequestCatalogDemo.label}</p>
-              </div>
-              <p className="mt-2 text-sm text-ink/60">
-                Повар собирает заказ кнопками `+ / -`, без ручного ввода количества.
-              </p>
-            </div>
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-              {kitchenRequestCatalogDemo.subcategories.map((subcategory) => (
+            <div className="grid grid-cols-2 gap-3">
+              {kitchenRequestCatalogDemo.map((mainCategory) => (
                 <button
-                  key={subcategory.id}
-                  className={`shrink-0 rounded-2xl px-4 py-3 text-sm font-semibold ${
-                    selectedSubcategoryId === subcategory.id
+                  key={mainCategory.id}
+                  className={`rounded-2xl px-4 py-4 text-left text-sm font-semibold ${
+                    selectedMainCategoryId === mainCategory.id
                       ? 'bg-ink text-white'
                       : 'bg-fog text-ink'
                   }`}
-                  onClick={() => setSelectedSubcategoryId(subcategory.id)}
+                  onClick={() => setSelectedMainCategoryId(mainCategory.id)}
                 >
-                  <span className="mr-2">{subcategory.icon}</span>
-                  {subcategory.label}
+                  <span className="mr-2 text-base">{mainCategory.icon}</span>
+                  {mainCategory.label}
                 </button>
               ))}
             </div>
-            <div className="mt-4 space-y-3">
-              {selectedSubcategory?.products.map((product) => {
-                const quantity = selectedQuantities[product.id] ?? 0;
-                const isOverLimit = quantity > product.weeklyNorm;
+            {selectedMainCategory?.description ? (
+              <p className="mt-4 text-sm text-ink/60">{selectedMainCategory.description}</p>
+            ) : null}
+            {selectedMainCategory?.subcategories.length ? (
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+                {selectedMainCategory.subcategories.map((subcategory) => (
+                  <button
+                    key={subcategory.id}
+                    className={`shrink-0 rounded-2xl px-4 py-3 text-sm font-semibold ${
+                      selectedSubcategoryId === subcategory.id
+                        ? 'bg-ink text-white'
+                        : 'bg-fog text-ink'
+                    }`}
+                    onClick={() => setSelectedSubcategoryId(subcategory.id)}
+                  >
+                    <span className="mr-2">{subcategory.icon}</span>
+                    {subcategory.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {selectedSubcategory?.products.length ? (
+              <div className="mt-4 space-y-3">
+                {selectedSubcategory.products.map((product) => {
+                  const quantity = selectedQuantities[product.id] ?? 0;
+                  const isOverLimit = quantity > product.weeklyNorm;
 
-                return (
-                  <div key={product.id} className="rounded-2xl bg-fog p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">{selectedSubcategory.icon}</span>
-                          <p className="font-semibold">{product.name}</p>
+                  return (
+                    <div key={product.id} className="rounded-2xl bg-fog p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{selectedSubcategory.icon}</span>
+                            <p className="font-semibold">{product.name}</p>
+                          </div>
+                          <p className="mt-2 text-sm text-ink/55">
+                            В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
+                          </p>
                         </div>
-                        <p className="mt-2 text-sm text-ink/55">
-                          Норма: {formatQuantity(product.weeklyNorm, product.unit)} / неделя
-                        </p>
-                        <p className="text-sm text-ink/55">
-                          Шаг: {formatQuantity(product.step, product.unit)}
-                        </p>
+                        <Pill tone={isOverLimit ? 'warning' : quantity > 0 ? 'success' : 'default'}>
+                          {formatQuantity(quantity, product.unit)}
+                        </Pill>
                       </div>
-                      <Pill tone={isOverLimit ? 'warning' : quantity > 0 ? 'success' : 'default'}>
-                        {formatQuantity(quantity, product.unit)}
-                      </Pill>
-                    </div>
-                    <div className="mt-4 flex items-center gap-3">
-                      <button
-                        className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-xl font-semibold"
-                        onClick={() => updateProductQuantity(product.id, product.step, -1)}
-                      >
-                        -
-                      </button>
-                      <div className="flex-1 rounded-2xl bg-white px-4 py-3 text-center text-lg font-semibold">
-                        {formatQuantity(quantity, product.unit)}
+                      <div className="mt-4 flex items-center gap-3">
+                        <button
+                          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-xl font-semibold"
+                          onClick={() => updateProductQuantity(product.id, product.step, -1)}
+                        >
+                          -
+                        </button>
+                        <div className="flex-1 rounded-2xl bg-white px-4 py-3 text-center text-lg font-semibold">
+                          {formatQuantity(quantity, product.unit)}
+                        </div>
+                        <button
+                          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-xl font-semibold text-white"
+                          onClick={() => updateProductQuantity(product.id, product.step, 1)}
+                        >
+                          +
+                        </button>
                       </div>
-                      <button
-                        className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink text-xl font-semibold text-white"
-                        onClick={() => updateProductQuantity(product.id, product.step, 1)}
-                      >
-                        +
-                      </button>
+                      {isOverLimit ? (
+                        <p className="mt-3 text-sm font-medium text-amber-900">
+                          Выше обычного объема. На подтверждении попросим проверить заказ.
+                        </p>
+                      ) : null}
                     </div>
-                    {isOverLimit ? (
-                      <p className="mt-3 text-sm font-medium text-amber-900">
-                        Выше обычного объема. На подтверждении попросим проверить заказ.
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl bg-fog p-4">
+                <p className="font-semibold">Категория наполняется</p>
+                <p className="mt-2 text-sm text-ink/60">
+                  Пока для теста доступен подробный каталог по мясу. Остальные категории можно
+                  заполнить позже тем же способом.
+                </p>
+              </div>
+            )}
           </Card>
           {catalogNotice ? (
             <Card className="bg-pine/10">
@@ -379,8 +424,9 @@ export const RequestsScreen = () => {
                 {request.requestMode === 'catalog' && request.quantity && request.unit ? (
                   <p className="mt-1 text-sm text-ink/60">
                     Заказано {formatQuantity(request.quantity, request.unit)}
-                    {request.weeklyNorm ? ` · норма ${formatQuantity(request.weeklyNorm, request.unit)} / нед` : ''}
-                    {request.step ? ` · шаг ${formatQuantity(request.step, request.unit)}` : ''}
+                    {request.weeklyNorm
+                      ? ` · в неделю ${formatQuantity(request.weeklyNorm, request.unit)}`
+                      : ''}
                   </p>
                 ) : (
                   <p className="mt-1 text-sm text-ink/60">
@@ -440,7 +486,7 @@ export const RequestsScreen = () => {
                         <div className="min-w-0">
                           <p className="font-medium">{product.name}</p>
                           <p className="mt-1 text-sm text-ink/55">
-                            Норма {formatQuantity(product.weeklyNorm, product.unit)} / неделя
+                            В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
                           </p>
                         </div>
                         <div className="text-right">
