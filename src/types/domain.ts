@@ -106,6 +106,19 @@ export type TimeEntry = {
   createdAt: string;
 };
 
+export type RevenueGoals = {
+  weeklyRevenueTarget: number | null;
+  monthlyRevenueTarget: number | null;
+};
+
+export type DailyBusinessMetric = {
+  dateKey: string;
+  revenueActual: number | null;
+  averageCheckTarget: number | null;
+  averageCheckActual: number | null;
+  updatedAt: string;
+};
+
 export type AppState = {
   telegramName: string;
   shift: Shift;
@@ -117,4 +130,6 @@ export type AppState = {
   loginEmployees: EmployeeLoginOption[];
   session: SessionState;
   timeEntries: TimeEntry[];
+  revenueGoals: RevenueGoals;
+  dailyBusinessMetrics: DailyBusinessMetric[];
 };

@@ -20,6 +20,7 @@ import {
 } from '../lib/timeTracking';
 import type {
   AppState,
+  DailyBusinessMetric,
   Employee,
   EmployeeRole,
   HandoffArea,
@@ -69,6 +70,18 @@ type ActionResult = {
   requiresConfirmation?: boolean;
 };
 
+type RevenueGoalsInput = {
+  weeklyRevenueTarget: number | null;
+  monthlyRevenueTarget: number | null;
+};
+
+type DailyBusinessMetricInput = {
+  dateKey: string;
+  revenueActual: number | null;
+  averageCheckTarget: number | null;
+  averageCheckActual: number | null;
+};
+
 type Store = AppState & {
   employeesLoading: boolean;
   loginEmployeesLoading: boolean;
@@ -100,6 +113,8 @@ type Store = AppState & {
   closeShift: () => void;
   startTimeEntry: (payload?: { now?: string; earlyReason?: string | null }) => ActionResult;
   endCurrentTimeEntry: (payload?: { now?: string; force?: boolean }) => ActionResult;
+  saveRevenueGoals: (input: RevenueGoalsInput) => ActionResult;
+  saveDailyBusinessMetric: (input: DailyBusinessMetricInput) => ActionResult;
   resetDemo: () => void;
 };
 
@@ -112,6 +127,8 @@ type PersistedStoreSlice = Pick<
   | 'handoffItems'
   | 'requests'
   | 'timeEntries'
+  | 'revenueGoals'
+  | 'dailyBusinessMetrics'
   | 'session'
 >;
 
@@ -134,6 +151,11 @@ const normalizeState = (state: AppState): AppState => ({
   telegramName: state.telegramName || 'Гость смены',
   employees: state.employees ?? [],
   loginEmployees: state.loginEmployees ?? [],
+  revenueGoals: state.revenueGoals ?? {
+    weeklyRevenueTarget: null,
+    monthlyRevenueTarget: null,
+  },
+  dailyBusinessMetrics: state.dailyBusinessMetrics ?? [],
   session: createAnonymousSession({
     bootstrapped: state.session?.bootstrapped ?? null,
     token: state.session?.token ?? null,
@@ -210,6 +232,9 @@ const replaceEmployeeInList = (employees: Employee[], nextEmployee: Employee) =>
 
 const getSessionToken = (state: Store) => state.session.token;
 const getSessionMe = (state: Store) => state.session.me;
+
+const sortDailyBusinessMetrics = (metrics: DailyBusinessMetric[]) =>
+  [...metrics].sort((left, right) => right.dateKey.localeCompare(left.dateKey));
 
 export const useAppStore = create<Store>()(
   persist(
@@ -905,6 +930,75 @@ export const useAppStore = create<Store>()(
 
         return { ok: true };
       },
+      saveRevenueGoals: (input) => {
+        const currentEmployee = getCurrentEmployee(get());
+
+        if (currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        set({
+          revenueGoals: {
+            weeklyRevenueTarget:
+              input.weeklyRevenueTarget && input.weeklyRevenueTarget > 0
+                ? input.weeklyRevenueTarget
+                : null,
+            monthlyRevenueTarget:
+              input.monthlyRevenueTarget && input.monthlyRevenueTarget > 0
+                ? input.monthlyRevenueTarget
+                : null,
+          },
+        });
+
+        return { ok: true };
+      },
+      saveDailyBusinessMetric: (input) => {
+        const currentEmployee = getCurrentEmployee(get());
+
+        if (currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        if (!input.dateKey) {
+          return {
+            ok: false,
+            reason: 'Нужна дата',
+          };
+        }
+
+        const nextMetric: DailyBusinessMetric = {
+          dateKey: input.dateKey,
+          revenueActual:
+            input.revenueActual && input.revenueActual > 0 ? input.revenueActual : null,
+          averageCheckTarget:
+            input.averageCheckTarget && input.averageCheckTarget > 0
+              ? input.averageCheckTarget
+              : null,
+          averageCheckActual:
+            input.averageCheckActual && input.averageCheckActual > 0
+              ? input.averageCheckActual
+              : null,
+          updatedAt: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          dailyBusinessMetrics: sortDailyBusinessMetrics(
+            state.dailyBusinessMetrics.some((metric) => metric.dateKey === input.dateKey)
+              ? state.dailyBusinessMetrics.map((metric) =>
+                  metric.dateKey === input.dateKey ? nextMetric : metric,
+                )
+              : [nextMetric, ...state.dailyBusinessMetrics],
+          ),
+        }));
+
+        return { ok: true };
+      },
       resetDemo: () =>
         set((state) => ({
           ...normalizeState(cloneInitialState()),
@@ -917,7 +1011,7 @@ export const useAppStore = create<Store>()(
     }),
     {
       name: storageKey,
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedStoreSlice => ({
         telegramName: state.telegramName,
@@ -927,6 +1021,8 @@ export const useAppStore = create<Store>()(
         handoffItems: state.handoffItems,
         requests: state.requests,
         timeEntries: state.timeEntries,
+        revenueGoals: state.revenueGoals,
+        dailyBusinessMetrics: state.dailyBusinessMetrics,
         session: {
           token: state.session.token,
           bootstrapped: null,
@@ -945,6 +1041,9 @@ export const useAppStore = create<Store>()(
           handoffItems: persisted.handoffItems ?? baseState.handoffItems,
           requests: persisted.requests ?? baseState.requests,
           timeEntries: persisted.timeEntries ?? baseState.timeEntries,
+          revenueGoals: persisted.revenueGoals ?? baseState.revenueGoals,
+          dailyBusinessMetrics:
+            persisted.dailyBusinessMetrics ?? baseState.dailyBusinessMetrics,
           employees: [],
           loginEmployees: [],
           session: createAnonymousSession({
@@ -1035,6 +1134,69 @@ export const getEntriesForPeriod = (
   period: TimesheetPeriod,
   now = new Date(),
 ) => getPeriodEntries(entries, period, now);
+
+export const getLocalDateKey = (date = new Date()) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate(),
+  ).padStart(2, '0')}`;
+
+const getPeriodBounds = (period: TimesheetPeriod, now = new Date()) => {
+  const start = new Date(now);
+  const end = new Date(now);
+
+  if (period === 'day') {
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  if (period === 'week') {
+    const day = start.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    start.setDate(start.getDate() + diff);
+    start.setHours(0, 0, 0, 0);
+    end.setTime(start.getTime());
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  end.setMonth(start.getMonth() + 1, 0);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+};
+
+export const getDailyBusinessMetricForDate = (
+  metrics: DailyBusinessMetric[],
+  dateKey: string,
+) => metrics.find((metric) => metric.dateKey === dateKey) ?? null;
+
+export const getDailyBusinessMetricsForPeriod = (
+  metrics: DailyBusinessMetric[],
+  period: TimesheetPeriod,
+  now = new Date(),
+) => {
+  const { start, end } = getPeriodBounds(period, now);
+
+  return metrics.filter((metric) => {
+    const metricDate = new Date(`${metric.dateKey}T12:00:00`);
+
+    return metricDate >= start && metricDate <= end;
+  });
+};
+
+export const getRevenueActualForPeriod = (
+  metrics: DailyBusinessMetric[],
+  period: TimesheetPeriod,
+  now = new Date(),
+) =>
+  getDailyBusinessMetricsForPeriod(metrics, period, now).reduce(
+    (sum, metric) => sum + (metric.revenueActual ?? 0),
+    0,
+  );
 
 export const getEntryEarnings = (
   entries: TimeEntry[],

@@ -9,6 +9,15 @@ const isoAt = (dayOffset: number, hour: number, minute: number) => {
   return value.toISOString();
 };
 
+const localDateKeyAt = (dayOffset: number) => {
+  const value = new Date(now);
+  value.setDate(value.getDate() + dayOffset);
+
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(
+    value.getDate(),
+  ).padStart(2, '0')}`;
+};
+
 export const mockState: AppState = {
   telegramName: 'Гость смены',
   shift: {
@@ -97,6 +106,33 @@ export const mockState: AppState = {
     token: null,
     me: null,
   },
+  revenueGoals: {
+    weeklyRevenueTarget: 580000,
+    monthlyRevenueTarget: 2450000,
+  },
+  dailyBusinessMetrics: [
+    {
+      dateKey: localDateKeyAt(0),
+      revenueActual: 78500,
+      averageCheckTarget: 2350,
+      averageCheckActual: 2210,
+      updatedAt: now.toISOString(),
+    },
+    {
+      dateKey: localDateKeyAt(-1),
+      revenueActual: 72400,
+      averageCheckTarget: 2250,
+      averageCheckActual: 2310,
+      updatedAt: isoAt(-1, 23, 35),
+    },
+    {
+      dateKey: localDateKeyAt(-2),
+      revenueActual: 69300,
+      averageCheckTarget: 2200,
+      averageCheckActual: 2180,
+      updatedAt: isoAt(-2, 23, 10),
+    },
+  ],
   timeEntries: [
     {
       id: 'time-owner-1',

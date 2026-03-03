@@ -8,9 +8,11 @@ import {
 } from '../lib/timeTracking';
 import {
   getCurrentEmployee,
+  getDailyBusinessMetricForDate,
   getDepartmentLabel,
   getEntriesForPeriod,
   getEntriesHours,
+  getLocalDateKey,
   getProfileRate,
   getRoleLabel,
   getTeamStats,
@@ -37,6 +39,18 @@ const periodLabels: Record<TimesheetPeriod, string> = {
 };
 
 const normalizeAssignee = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
+const toInputValue = (value: number | null) => (value ? String(value) : '');
+const toNullableNumber = (value: string) => {
+  const trimmed = value.trim().replace(',', '.');
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
 
 const StatValue = ({
   value,
@@ -56,6 +70,146 @@ const StatValue = ({
     <p className="text-xs text-ink/45">≈ Предварительный расчёт</p>
   </div>
 );
+
+const OwnerRevenuePanel = () => {
+  const currentEmployee = useAppStore(getCurrentEmployee);
+  const revenueGoals = useAppStore((state) => state.revenueGoals);
+  const dailyBusinessMetrics = useAppStore((state) => state.dailyBusinessMetrics);
+  const saveRevenueGoals = useAppStore((state) => state.saveRevenueGoals);
+  const saveDailyBusinessMetric = useAppStore((state) => state.saveDailyBusinessMetric);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateKey(new Date()));
+  const [weeklyPlanInput, setWeeklyPlanInput] = useState(
+    toInputValue(revenueGoals.weeklyRevenueTarget),
+  );
+  const [monthlyPlanInput, setMonthlyPlanInput] = useState(
+    toInputValue(revenueGoals.monthlyRevenueTarget),
+  );
+  const [dailyRevenueInput, setDailyRevenueInput] = useState('');
+  const [averageCheckTargetInput, setAverageCheckTargetInput] = useState('');
+  const [averageCheckActualInput, setAverageCheckActualInput] = useState('');
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setWeeklyPlanInput(toInputValue(revenueGoals.weeklyRevenueTarget));
+    setMonthlyPlanInput(toInputValue(revenueGoals.monthlyRevenueTarget));
+  }, [revenueGoals.monthlyRevenueTarget, revenueGoals.weeklyRevenueTarget]);
+
+  useEffect(() => {
+    const metric = getDailyBusinessMetricForDate(dailyBusinessMetrics, selectedDate);
+    setDailyRevenueInput(toInputValue(metric?.revenueActual ?? null));
+    setAverageCheckTargetInput(toInputValue(metric?.averageCheckTarget ?? null));
+    setAverageCheckActualInput(toInputValue(metric?.averageCheckActual ?? null));
+  }, [dailyBusinessMetrics, selectedDate]);
+
+  if (currentEmployee?.role !== 'owner') {
+    return null;
+  }
+
+  const saveGoals = () => {
+    setFeedback(null);
+    setError(null);
+    const result = saveRevenueGoals({
+      weeklyRevenueTarget: toNullableNumber(weeklyPlanInput),
+      monthlyRevenueTarget: toNullableNumber(monthlyPlanInput),
+    });
+
+    if (!result.ok) {
+      setError(result.reason ?? 'Не удалось сохранить планы');
+      return;
+    }
+
+    setFeedback('Планы обновлены');
+  };
+
+  const saveDailyMetric = () => {
+    setFeedback(null);
+    setError(null);
+    const result = saveDailyBusinessMetric({
+      dateKey: selectedDate,
+      revenueActual: toNullableNumber(dailyRevenueInput),
+      averageCheckTarget: toNullableNumber(averageCheckTargetInput),
+      averageCheckActual: toNullableNumber(averageCheckActualInput),
+    });
+
+    if (!result.ok) {
+      setError(result.reason ?? 'Не удалось сохранить показатели дня');
+      return;
+    }
+
+    setFeedback('Показатели дня обновлены');
+  };
+
+  return (
+    <Card>
+      <SectionTitle title="Панель основателя" />
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-fog p-4">
+          <p className="text-xs text-ink/45">Планы по выручке</p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Input
+              type="number"
+              min="0"
+              placeholder="План на неделю"
+              value={weeklyPlanInput}
+              onChange={(event) => setWeeklyPlanInput(event.target.value)}
+            />
+            <Input
+              type="number"
+              min="0"
+              placeholder="План на месяц"
+              value={monthlyPlanInput}
+              onChange={(event) => setMonthlyPlanInput(event.target.value)}
+            />
+          </div>
+          <div className="mt-3">
+            <PrimaryButton onClick={saveGoals}>Сохранить планы</PrimaryButton>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-fog p-4">
+          <p className="text-xs text-ink/45">Факт по смене</p>
+          <div className="mt-3 space-y-3">
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+            />
+            <Input
+              type="number"
+              min="0"
+              placeholder="Выручка за день"
+              value={dailyRevenueInput}
+              onChange={(event) => setDailyRevenueInput(event.target.value)}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                type="number"
+                min="0"
+                placeholder="План по среднему чеку"
+                value={averageCheckTargetInput}
+                onChange={(event) => setAverageCheckTargetInput(event.target.value)}
+              />
+              <Input
+                type="number"
+                min="0"
+                placeholder="Факт среднего чека"
+                value={averageCheckActualInput}
+                onChange={(event) => setAverageCheckActualInput(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+            <PrimaryButton onClick={saveDailyMetric}>Сохранить факт дня</PrimaryButton>
+          </div>
+        </div>
+
+        {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        {feedback ? <p className="text-sm text-pine">{feedback}</p> : null}
+      </div>
+    </Card>
+  );
+};
 
 const OwnerStats = () => {
   const state = useAppStore();
@@ -432,6 +586,7 @@ export const ProfileScreen = () => {
         </div>
       </Card>
 
+      <OwnerRevenuePanel />
       <OwnerStats />
 
       <Card>

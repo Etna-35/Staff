@@ -55,12 +55,22 @@ export const SectionTitle = ({
   </div>
 );
 
-export const ProgressBar = ({ value }: { value: number }) => (
+export const ProgressBar = ({
+  value,
+  label = 'Прогресс смены',
+  hideHeader = false,
+}: {
+  value: number;
+  label?: string;
+  hideHeader?: boolean;
+}) => (
   <div className="space-y-2">
-    <div className="flex items-center justify-between text-sm text-ink/70">
-      <span>Прогресс смены</span>
-      <span className="font-semibold text-ink">{value}%</span>
-    </div>
+    {hideHeader ? null : (
+      <div className="flex items-center justify-between text-sm text-ink/70">
+        <span>{label}</span>
+        <span className="font-semibold text-ink">{value}%</span>
+      </div>
+    )}
     <div className="h-3 rounded-full bg-fog">
       <div
         className="h-3 rounded-full bg-gradient-to-r from-clay to-citrus transition-all"

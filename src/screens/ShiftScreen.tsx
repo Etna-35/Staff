@@ -4,8 +4,11 @@ import { appLinks } from '../config/links';
 import { initTelegramApp, getTelegramDisplayName } from '../lib/telegram';
 import { durationHours, formatDuration, isBeforeShiftStart } from '../lib/timeTracking';
 import {
+  getDailyBusinessMetricForDate,
   getCurrentActiveEntry,
   getCurrentEmployee,
+  getLocalDateKey,
+  getRevenueActualForPeriod,
   getVisibleStageKeys,
   useAppStore,
 } from '../store/useAppStore';
@@ -50,8 +53,10 @@ export const ShiftScreen = () => {
     setTelegramName,
     shift,
     losses,
+    dailyBusinessMetrics,
     handoffItems,
     completeStage,
+    revenueGoals,
     startTimeEntry,
     endCurrentTimeEntry,
     tasks,
@@ -113,6 +118,18 @@ export const ShiftScreen = () => {
   const workedNowLabel = activeEntry
     ? formatDuration(durationHours(activeEntry.startAt, null))
     : null;
+  const weeklyRevenueActual = getRevenueActualForPeriod(dailyBusinessMetrics, 'week');
+  const monthlyRevenueActual = getRevenueActualForPeriod(dailyBusinessMetrics, 'month');
+  const todayMetric = getDailyBusinessMetricForDate(
+    dailyBusinessMetrics,
+    getLocalDateKey(new Date()),
+  );
+  const weeklyRevenueProgress = revenueGoals.weeklyRevenueTarget
+    ? Math.min(Math.round((weeklyRevenueActual / revenueGoals.weeklyRevenueTarget) * 100), 100)
+    : 0;
+  const monthlyRevenueProgress = revenueGoals.monthlyRevenueTarget
+    ? Math.min(Math.round((monthlyRevenueActual / revenueGoals.monthlyRevenueTarget) * 100), 100)
+    : 0;
 
   const onStartShift = () => {
     setEntryError(null);
@@ -197,6 +214,42 @@ export const ShiftScreen = () => {
           <p className="text-sm font-semibold text-red-700">{entryError}</p>
         </Card>
       ) : null}
+
+      <Card className="space-y-4">
+        <SectionTitle title="План ресторана" />
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium text-ink">Неделя по выручке</span>
+              <span className="text-ink/60">
+                {revenueGoals.weeklyRevenueTarget
+                  ? `${weeklyRevenueActual.toLocaleString('ru-RU')} / ${revenueGoals.weeklyRevenueTarget.toLocaleString('ru-RU')} ₽`
+                  : 'План не задан'}
+              </span>
+            </div>
+            <ProgressBar value={weeklyRevenueProgress} hideHeader />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium text-ink">Месяц по выручке</span>
+              <span className="text-ink/60">
+                {revenueGoals.monthlyRevenueTarget
+                  ? `${monthlyRevenueActual.toLocaleString('ru-RU')} / ${revenueGoals.monthlyRevenueTarget.toLocaleString('ru-RU')} ₽`
+                  : 'План не задан'}
+              </span>
+            </div>
+            <ProgressBar value={monthlyRevenueProgress} hideHeader />
+          </div>
+          <div className="rounded-2xl bg-fog p-4">
+            <p className="text-xs text-ink/50">Средний чек сегодня</p>
+            <p className="mt-2 text-xl font-semibold text-ink">
+              {todayMetric?.averageCheckTarget || todayMetric?.averageCheckActual
+                ? `${(todayMetric?.averageCheckActual ?? 0).toLocaleString('ru-RU')} / ${(todayMetric?.averageCheckTarget ?? 0).toLocaleString('ru-RU')} ₽`
+                : 'План не задан'}
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <Card className="space-y-4 bg-gradient-to-br from-white to-[#fff5dd]">
         <ProgressBar value={shift.closedAt ? 100 : progress} />
