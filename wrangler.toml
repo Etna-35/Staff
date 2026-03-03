@@ -5,3 +5,6 @@ compatibility_date = "2024-03-01"
 [[kv_namespaces]]
 binding = "STAFF_KV"
 id = "cfee6db9b68a4b1181a199f42056f6fa"
+
+[vars]
+ALLOWED_ORIGIN = "https://etnastaff.pages.dev"
