@@ -149,8 +149,17 @@ export const ShellHeader = ({
   subtitle: string;
 }) => (
   <div className="mb-4 rounded-[2rem] bg-ink px-5 py-5 text-white shadow-card">
-    <p className="text-sm text-white/65">{subtitle}</p>
-    <h1 className="mt-2 font-display text-2xl font-semibold">{name}</h1>
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-sm text-white/65">{subtitle}</p>
+        <h1 className="mt-2 font-display text-2xl font-semibold">{name}</h1>
+      </div>
+      <img
+        src="/etna-mark.svg"
+        alt="Etna"
+        className="mt-1 h-9 w-auto shrink-0 opacity-95"
+      />
+    </div>
   </div>
 );
 
