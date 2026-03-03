@@ -165,27 +165,6 @@ export const ShiftScreen = () => {
         subtitle={currentEmployee?.positionTitle ?? 'Сотрудник'}
       />
 
-      <Card className="space-y-4 bg-gradient-to-br from-white to-[#fff5dd]">
-        <ProgressBar value={shift.closedAt ? 100 : progress} />
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-white/70 p-3">
-            <p className="text-xs text-ink/55">Этапов закрыто</p>
-            <p className="mt-1 text-xl font-semibold text-ink">
-              {completedCount}/{stages.length}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-white/70 p-3">
-            <p className="text-xs text-ink/55">Статус</p>
-            <p className="mt-1 text-xl font-semibold text-ink">
-              {shift.closedAt ? 'Смена закрыта' : 'В процессе'}
-            </p>
-          </div>
-        </div>
-        <PrimaryButton disabled={!canClose} onClick={closeShift}>
-          {shift.closedAt ? 'Смена закрыта' : 'Закрыть смену'}
-        </PrimaryButton>
-      </Card>
-
       <Card>
         <SectionTitle
           title="Табель"
@@ -237,6 +216,27 @@ export const ShiftScreen = () => {
           )}
           {entryError ? <p className="text-sm text-red-700">{entryError}</p> : null}
         </div>
+      </Card>
+
+      <Card className="space-y-4 bg-gradient-to-br from-white to-[#fff5dd]">
+        <ProgressBar value={shift.closedAt ? 100 : progress} />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-white/70 p-3">
+            <p className="text-xs text-ink/55">Этапов закрыто</p>
+            <p className="mt-1 text-xl font-semibold text-ink">
+              {completedCount}/{stages.length}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white/70 p-3">
+            <p className="text-xs text-ink/55">Статус</p>
+            <p className="mt-1 text-xl font-semibold text-ink">
+              {shift.closedAt ? 'Смена закрыта' : 'В процессе'}
+            </p>
+          </div>
+        </div>
+        <PrimaryButton disabled={!canClose} onClick={closeShift}>
+          {shift.closedAt ? 'Смена закрыта' : 'Закрыть смену'}
+        </PrimaryButton>
       </Card>
 
       <div>
