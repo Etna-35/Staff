@@ -1,11 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { appLinks } from '../config/links';
+import { useEffect, useMemo, useState } from 'react';
 import { kitchenRequestCatalogDemo } from '../data/requestCatalog';
 import { useAppStore } from '../store/useAppStore';
 import type { RequestCategory } from '../types/domain';
 import {
   Card,
-  Input,
   Pill,
   PrimaryButton,
   SectionTitle,
@@ -17,6 +15,27 @@ const requestOptions: { key: RequestCategory; label: string }[] = [
   { key: 'kitchen', label: 'Кухня' },
   { key: 'bar', label: 'Бар' },
   { key: 'supplies', label: 'Хозка' },
+];
+
+const requestCategoryLabels: Record<RequestCategory, string> = {
+  kitchen: 'Кухня',
+  bar: 'Бар',
+  supplies: 'Хозка',
+};
+
+const monthLabels = [
+  'Января',
+  'Февраля',
+  'Марта',
+  'Апреля',
+  'Мая',
+  'Июня',
+  'Июля',
+  'Августа',
+  'Сентября',
+  'Октября',
+  'Ноября',
+  'Декабря',
 ];
 
 const formatAmount = (value: number) => {
@@ -31,13 +50,21 @@ const formatQuantity = (value: number, unit: string) => `${formatAmount(value)} 
 
 const roundToStep = (value: number) => Math.round(value * 100) / 100;
 
+const getLocalDateKey = (value: string) => {
+  const date = new Date(value);
+
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+const formatRequestDate = (value: string) => {
+  const date = new Date(value);
+
+  return `${date.getDate()} ${monthLabels[date.getMonth()]}`;
+};
+
 export const RequestsScreen = () => {
   const { requests, submitRequest } = useAppStore();
   const [category, setCategory] = useState<RequestCategory>('kitchen');
-  const [item, setItem] = useState('');
-  const [remaining, setRemaining] = useState('');
-  const [needed, setNeeded] = useState('');
-  const [comment, setComment] = useState('');
   const [catalogComment, setCatalogComment] = useState('');
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
@@ -123,10 +150,28 @@ export const RequestsScreen = () => {
     return Array.from(groups.values());
   }, [selectedItems]);
 
-  const visibleRequests = useMemo(
-    () => requests.filter((request) => request.category === category),
-    [category, requests],
-  );
+  const requestHistoryRows = useMemo(() => {
+    const uniqueRows = new Map<
+      string,
+      { id: string; category: RequestCategory; createdAt: string }
+    >();
+
+    [...requests]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .forEach((request) => {
+        const key = `${request.category}:${getLocalDateKey(request.createdAt)}`;
+
+        if (!uniqueRows.has(key)) {
+          uniqueRows.set(key, {
+            id: key,
+            category: request.category,
+            createdAt: request.createdAt,
+          });
+        }
+      });
+
+    return Array.from(uniqueRows.values());
+  }, [requests]);
 
   useEffect(() => {
     setCatalogNotice(null);
@@ -154,27 +199,6 @@ export const RequestsScreen = () => {
   useEffect(() => {
     setOverLimitConfirmed(false);
   }, [overLimitSignature]);
-
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!item.trim() || !remaining.trim() || !needed.trim()) {
-      return;
-    }
-
-    submitRequest({
-      category,
-      item: item.trim(),
-      remaining: remaining.trim(),
-      needed: needed.trim(),
-      comment: comment.trim(),
-    });
-
-    setItem('');
-    setRemaining('');
-    setNeeded('');
-    setComment('');
-  };
 
   const updateProductQuantity = (productId: string, step: number, direction: 1 | -1) => {
     setCatalogNotice(null);
@@ -237,7 +261,6 @@ export const RequestsScreen = () => {
     <div className={`space-y-4 ${category === 'kitchen' && selectedItems.length ? 'pb-28' : ''}`}>
       <div>
         <p className="text-sm text-ink/55">Заявки</p>
-        <h1 className="font-display text-2xl font-semibold">Крупно, быстро, без поиска ссылок</h1>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -350,81 +373,29 @@ export const RequestsScreen = () => {
         </>
       ) : (
         <Card>
-          <SectionTitle title="Локальная форма MVP" />
-          <form className="space-y-3" onSubmit={onSubmit}>
-            <Input
-              placeholder="Позиция"
-              value={item}
-              onChange={(event) => setItem(event.target.value)}
-            />
-            <Input
-              placeholder="Остаток"
-              value={remaining}
-              onChange={(event) => setRemaining(event.target.value)}
-            />
-            <Input
-              placeholder="Нужно"
-              value={needed}
-              onChange={(event) => setNeeded(event.target.value)}
-            />
-            <Textarea
-              placeholder="Комментарий"
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-            />
-            <PrimaryButton type="submit">Сохранить заявку</PrimaryButton>
-          </form>
+          <SectionTitle title={category === 'bar' ? 'Бар' : 'Хозка'} />
+          <div className="rounded-2xl bg-fog p-4">
+            <p className="font-semibold">Раздел в работе</p>
+            <p className="mt-2 text-sm text-ink/60">
+              Скоро здесь появится такой же каталог с быстрым набором позиций, как у кухни.
+            </p>
+          </div>
         </Card>
       )}
 
       <Card>
-        <SectionTitle title="Внешняя форма" />
-        <a
-          href={appLinks.externalRequestForms[category]}
-          target="_blank"
-          rel="noreferrer"
-          className="block rounded-2xl bg-fog px-4 py-4 text-sm font-semibold"
-        >
-          Открыть Yandex Form для категории
-        </a>
-      </Card>
-
-      <Card>
         <SectionTitle title="Последние заявки" />
         <div className="space-y-3">
-          {visibleRequests.length === 0 ? (
-            <p className="text-sm text-ink/55">Пока нет сохраненных заявок по этой категории.</p>
+          {requestHistoryRows.length === 0 ? (
+            <p className="text-sm text-ink/55">Пока заявок нет.</p>
           ) : (
-            visibleRequests.map((request) => (
-              <div key={request.id} className="rounded-2xl bg-fog p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{request.item}</p>
-                    {request.subgroup ? (
-                      <p className="mt-1 text-xs uppercase tracking-[0.2em] text-ink/45">
-                        {request.subgroup}
-                      </p>
-                    ) : null}
-                  </div>
-                  <span className="text-xs uppercase tracking-[0.2em] text-ink/45">
-                    {request.category}
-                  </span>
-                </div>
-                {request.requestMode === 'catalog' && request.quantity && request.unit ? (
-                  <p className="mt-1 text-sm text-ink/60">
-                    Заказано {formatQuantity(request.quantity, request.unit)}
-                    {request.weeklyNorm
-                      ? ` · в неделю ${formatQuantity(request.weeklyNorm, request.unit)}`
-                      : ''}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-sm text-ink/60">
-                    Остаток {request.remaining} → нужно {request.needed}
-                  </p>
-                )}
-                {request.comment ? (
-                  <p className="mt-2 text-sm text-ink/60">{request.comment}</p>
-                ) : null}
+            requestHistoryRows.map((request) => (
+              <div
+                key={request.id}
+                className="flex items-center justify-between gap-3 rounded-2xl bg-fog p-3"
+              >
+                <p className="font-semibold">{requestCategoryLabels[request.category]}</p>
+                <p className="text-sm text-ink/55">{formatRequestDate(request.createdAt)}</p>
               </div>
             ))
           )}
