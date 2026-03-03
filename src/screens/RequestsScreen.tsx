@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { kitchenRequestCatalogDemo } from '../data/requestCatalog';
-import { useAppStore } from '../store/useAppStore';
+import { getCurrentEmployee, useAppStore } from '../store/useAppStore';
 import type { RequestCategory } from '../types/domain';
 import {
   Card,
@@ -64,11 +64,11 @@ const formatRequestDate = (value: string) => {
 
 export const RequestsScreen = () => {
   const { requests, submitRequest } = useAppStore();
+  const currentEmployee = useAppStore(getCurrentEmployee);
   const [category, setCategory] = useState<RequestCategory>('kitchen');
   const [catalogComment, setCatalogComment] = useState('');
   const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
-  const [overLimitConfirmed, setOverLimitConfirmed] = useState(false);
   const [selectedMainCategoryId, setSelectedMainCategoryId] = useState(
     kitchenRequestCatalogDemo[0]?.id ?? '',
   );
@@ -76,6 +76,8 @@ export const RequestsScreen = () => {
     kitchenRequestCatalogDemo[0]?.subcategories[0]?.id ?? '',
   );
   const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
+  const showWeeklyNorm = currentEmployee?.role === 'owner';
+  const isWaiterPreview = currentEmployee?.role === 'waiter';
 
   const selectedMainCategory =
     kitchenRequestCatalogDemo.find((entry) => entry.id === selectedMainCategoryId) ??
@@ -111,19 +113,6 @@ export const RequestsScreen = () => {
         }))
         .filter((product) => product.quantity > 0),
     [catalogProducts, selectedQuantities],
-  );
-
-  const overLimitItems = useMemo(
-    () => selectedItems.filter((product) => product.quantity > product.weeklyNorm),
-    [selectedItems],
-  );
-  const overLimitSignature = useMemo(
-    () =>
-      overLimitItems
-        .map((product) => `${product.id}:${product.quantity}`)
-        .sort()
-        .join('|'),
-    [overLimitItems],
   );
 
   const groupedSelectedItems = useMemo(() => {
@@ -193,12 +182,8 @@ export const RequestsScreen = () => {
       selectedMainCategory.subcategories.some((entry) => entry.id === current)
         ? current
         : firstSubcategoryId,
-    );
+      );
   }, [selectedMainCategory]);
-
-  useEffect(() => {
-    setOverLimitConfirmed(false);
-  }, [overLimitSignature]);
 
   const updateProductQuantity = (productId: string, step: number, direction: 1 | -1) => {
     setCatalogNotice(null);
@@ -223,7 +208,9 @@ export const RequestsScreen = () => {
       return;
     }
 
-    if (overLimitItems.length > 0 && !overLimitConfirmed) {
+    if (isWaiterPreview) {
+      setCatalogNotice('Для официантов оформление заявок пока отключено.');
+      setShowSummary(false);
       return;
     }
 
@@ -233,14 +220,7 @@ export const RequestsScreen = () => {
         item: product.name,
         remaining: formatQuantity(product.weeklyNorm, product.unit),
         needed: formatQuantity(product.quantity, product.unit),
-        comment: [
-          product.quantity > product.weeklyNorm
-            ? `Повар подтвердил объем выше нормы`
-            : null,
-          catalogComment.trim() || null,
-        ]
-          .filter(Boolean)
-          .join(' · '),
+        comment: catalogComment.trim(),
         requestMode: 'catalog',
         quantity: product.quantity,
         unit: product.unit,
@@ -253,7 +233,6 @@ export const RequestsScreen = () => {
     setSelectedQuantities({});
     setCatalogComment('');
     setShowSummary(false);
-    setOverLimitConfirmed(false);
     setCatalogNotice('Заявка сохранена локально. Можно проверить список ниже.');
   };
 
@@ -280,7 +259,6 @@ export const RequestsScreen = () => {
       {category === 'kitchen' ? (
         <>
           <Card>
-            <SectionTitle title="Кухня · каталог" />
             <div className="flex gap-2 overflow-x-auto pb-1">
               {kitchenRequestCatalogDemo.map((mainCategory) => (
                 <button
@@ -319,15 +297,16 @@ export const RequestsScreen = () => {
               <div className="mt-4 space-y-3">
                 {selectedSubcategory.products.map((product) => {
                   const quantity = selectedQuantities[product.id] ?? 0;
-                  const isOverLimit = quantity > product.weeklyNorm;
 
                   return (
                     <div key={product.id} className="rounded-2xl bg-fog p-4">
                       <div className="min-w-0">
                         <p className="font-semibold">{product.name}</p>
-                        <p className="mt-2 text-sm text-ink/55">
-                          В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
-                        </p>
+                        {showWeeklyNorm ? (
+                          <p className="mt-2 text-sm text-ink/55">
+                            В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="mt-4 flex items-center gap-3">
                         <button
@@ -346,11 +325,6 @@ export const RequestsScreen = () => {
                           +
                         </button>
                       </div>
-                      {isOverLimit ? (
-                        <p className="mt-3 text-sm font-medium text-amber-900">
-                          Выше обычного объема. На подтверждении попросим проверить заказ.
-                        </p>
-                      ) : null}
                     </div>
                   );
                 })}
@@ -367,13 +341,18 @@ export const RequestsScreen = () => {
           </Card>
           {catalogNotice ? (
             <Card className="bg-pine/10">
-              <p className="text-sm font-semibold text-pine">{catalogNotice}</p>
+              <p
+                className={`text-sm font-semibold ${
+                  isWaiterPreview ? 'text-clay' : 'text-pine'
+                }`}
+              >
+                {catalogNotice}
+              </p>
             </Card>
           ) : null}
         </>
       ) : (
         <Card>
-          <SectionTitle title={category === 'bar' ? 'Бар' : 'Хозка'} />
           <div className="rounded-2xl bg-fog p-4">
             <p className="font-semibold">Раздел в работе</p>
             <p className="mt-2 text-sm text-ink/60">
@@ -409,17 +388,12 @@ export const RequestsScreen = () => {
               <div>
                 <p className="text-xs text-white/60">Черновик заявки</p>
                 <p className="mt-1 font-semibold">Выбрано {selectedItems.length} позиций</p>
-                {overLimitItems.length > 0 ? (
-                  <p className="mt-1 text-xs text-citrus">
-                    {overLimitItems.length} поз. выше недельной нормы
-                  </p>
-                ) : null}
               </div>
               <button
                 className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-ink"
                 onClick={() => setShowSummary(true)}
               >
-                Проверить
+                {isWaiterPreview ? 'Смотреть' : 'Проверить'}
               </button>
             </div>
           </div>
@@ -431,6 +405,15 @@ export const RequestsScreen = () => {
           <div className="w-full rounded-t-[2rem] bg-white p-5">
             <SectionTitle title="Проверьте заявку" action={<Pill>{selectedItems.length} поз.</Pill>} />
             <div className="space-y-4">
+              {isWaiterPreview ? (
+                <div className="rounded-2xl bg-fog p-4">
+                  <p className="font-semibold">Режим просмотра</p>
+                  <p className="mt-2 text-sm text-ink/60">
+                    Для официантов заявки пока недоступны. Можно смотреть каталог и собирать
+                    черновик без оформления.
+                  </p>
+                </div>
+              ) : null}
               {groupedSelectedItems.map((group) => (
                 <div key={group.label} className="rounded-2xl bg-fog p-4">
                   <div className="flex items-center gap-2">
@@ -445,19 +428,16 @@ export const RequestsScreen = () => {
                       >
                         <div className="min-w-0">
                           <p className="font-medium">{product.name}</p>
-                          <p className="mt-1 text-sm text-ink/55">
-                            В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
-                          </p>
+                          {showWeeklyNorm ? (
+                            <p className="mt-1 text-sm text-ink/55">
+                              В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">
                             {formatQuantity(product.quantity, product.unit)}
                           </p>
-                          {product.quantity > product.weeklyNorm ? (
-                            <p className="mt-1 text-xs font-semibold text-amber-900">
-                              Выше нормы
-                            </p>
-                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -465,39 +445,20 @@ export const RequestsScreen = () => {
                 </div>
               ))}
 
-              <Textarea
-                placeholder="Комментарий к заявке"
-                value={catalogComment}
-                onChange={(event) => setCatalogComment(event.target.value)}
-              />
-
-              {overLimitItems.length > 0 ? (
-                <div className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
-                  <p className="font-semibold">Есть заказ выше обычного объема</p>
-                  <p className="mt-1">
-                    Проверьте позиции и подтвердите, что это верный объем для заказа.
-                  </p>
-                  <label className="mt-3 flex items-start gap-2 font-medium">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={overLimitConfirmed}
-                      onChange={(event) => setOverLimitConfirmed(event.target.checked)}
-                    />
-                    Все верно, оставляем повышенный объем
-                  </label>
-                </div>
+              {!isWaiterPreview ? (
+                <Textarea
+                  placeholder="Комментарий к заявке"
+                  value={catalogComment}
+                  onChange={(event) => setCatalogComment(event.target.value)}
+                />
               ) : null}
             </div>
             <div className="mt-4 flex gap-3">
-              <PrimaryButton
-                disabled={overLimitItems.length > 0 && !overLimitConfirmed}
-                onClick={submitCatalogRequest}
-              >
-                Подтвердить заявку
+              <PrimaryButton disabled={isWaiterPreview} onClick={submitCatalogRequest}>
+                {isWaiterPreview ? 'Оформление недоступно' : 'Подтвердить заявку'}
               </PrimaryButton>
               <SecondaryButton onClick={() => setShowSummary(false)}>
-                Вернуться
+                {isWaiterPreview ? 'Закрыть' : 'Вернуться'}
               </SecondaryButton>
             </div>
           </div>
