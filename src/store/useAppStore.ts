@@ -37,6 +37,12 @@ type RequestInput = {
   remaining: string;
   needed: string;
   comment: string;
+  requestMode?: 'manual' | 'catalog';
+  quantity?: number;
+  unit?: string;
+  weeklyNorm?: number;
+  step?: number;
+  subgroup?: string;
 };
 
 type EmployeeDraft = {

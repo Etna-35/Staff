@@ -4,6 +4,8 @@ export type MissionStatus = 'assigned' | 'done' | 'accepted' | 'returned';
 
 export type RequestCategory = 'kitchen' | 'bar' | 'supplies';
 
+export type RequestMode = 'manual' | 'catalog';
+
 export type Criticality = 'high' | 'medium' | 'low';
 
 export type HandoffArea = 'kitchen' | 'bar';
@@ -58,6 +60,12 @@ export type Request = {
   remaining: string;
   needed: string;
   comment: string;
+  requestMode?: RequestMode;
+  quantity?: number;
+  unit?: string;
+  weeklyNorm?: number;
+  step?: number;
+  subgroup?: string;
   createdAt: string;
 };
 
