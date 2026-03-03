@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AppShell } from './AppShell';
 import { PinAuthScreen } from '../screens/PinAuthScreen';
+import { initTelegramApp } from '../lib/telegram';
 import { useAppStore } from '../store/useAppStore';
 
 export const ProtectedRoot = () => {
@@ -8,6 +9,10 @@ export const ProtectedRoot = () => {
   const authError = useAppStore((state) => state.authError);
   const loadBootstrapStatus = useAppStore((state) => state.loadBootstrapStatus);
   const loadMe = useAppStore((state) => state.loadMe);
+
+  useEffect(() => {
+    initTelegramApp();
+  }, []);
 
   useEffect(() => {
     void loadBootstrapStatus();

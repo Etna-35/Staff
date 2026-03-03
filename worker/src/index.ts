@@ -59,17 +59,29 @@ function withCors(request: Request, env: Env, resp: Response) {
   const headers = new Headers(resp.headers);
 
   // Allow localhost for dev
-  const isLocalhost = origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:");
-  const isAllowed = (allowed && origin === allowed) || isLocalhost;
+  const isLocalhost =
+    origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:");
 
-  if (origin && isAllowed) {
-    headers.set("access-control-allow-origin", origin);
-    headers.set("vary", "Origin");
-    headers.set("access-control-allow-credentials", "true");
-  }
+  // Telegram/iOS WebView иногда шлёт Origin: null
+  const isNullOrigin = origin === "null" || origin === "";
+
+  const isAllowed = isLocalhost || (allowed && origin === allowed) || isNullOrigin;
+
+  // Если origin пустой/нормальный — ставим allow-origin
+  // (credentials НЕ нужны, т.к. мы используем Authorization header)
+  headers.set("access-control-allow-origin", isNullOrigin ? "*" : origin);
+  headers.set("vary", "Origin");
 
   headers.set("access-control-allow-methods", "GET,POST,PATCH,DELETE,OPTIONS");
   headers.set("access-control-allow-headers", "content-type,authorization");
+
+  // Если origin вообще не разрешён — можно запретить (не обязательно, но правильно)
+  if (!isAllowed) {
+    return new Response(resp.body, {
+      status: 403,
+      headers,
+    });
+  }
 
   return new Response(resp.body, {
     status: resp.status,

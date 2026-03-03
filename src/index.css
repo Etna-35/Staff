@@ -21,8 +21,16 @@ body,
   margin: 0;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
 body {
   min-height: 100vh;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button,
@@ -30,6 +38,12 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+input,
+textarea,
+select {
+  font-size: 16px;
 }
 
 a {
@@ -44,4 +58,3 @@ a {
 .safe-pt {
   padding-top: calc(1rem + env(safe-area-inset-top));
 }
-

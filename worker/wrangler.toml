@@ -7,4 +7,4 @@ kv_namespaces = [
 ]
 
 [vars]
-ALLOWED_ORIGIN = "https://etnastaff.pages.dev"
+ALLOWED_ORIGIN = "https://staff.no-money-no-honey.ru"
