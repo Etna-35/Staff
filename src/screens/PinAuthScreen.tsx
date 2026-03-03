@@ -7,8 +7,11 @@ const sanitizePin = (value: string) => value.replace(/\D/g, '').slice(0, 6);
 export const PinAuthScreen = () => {
   const {
     session,
+    authError,
     loginEmployees,
     loginEmployeesLoading,
+    clearAuthError,
+    loadBootstrapStatus,
     refreshLoginEmployees,
     bootstrapOwner,
     loginWithPin,
@@ -37,6 +40,7 @@ export const PinAuthScreen = () => {
 
   const submitOwnerPin = async () => {
     setError(null);
+    clearAuthError();
 
     if (pin !== confirmPin) {
       setError('PIN не совпадает');
@@ -54,6 +58,7 @@ export const PinAuthScreen = () => {
 
   const submitLogin = async () => {
     setError(null);
+    clearAuthError();
 
     if (!selectedEmployeeId) {
       setError('Выберите сотрудника');
@@ -115,9 +120,16 @@ export const PinAuthScreen = () => {
                 </button>
               </div>
               {error ? <p className="text-sm text-red-700">{error}</p> : null}
+              {authError ? <p className="text-sm text-red-700">{authError}</p> : null}
               <PrimaryButton disabled={submitting} onClick={submitOwnerPin}>
                 Сохранить Owner PIN
               </PrimaryButton>
+              <button
+                className="text-sm font-semibold text-clay"
+                onClick={() => void loadBootstrapStatus()}
+              >
+                Обновить статус
+              </button>
             </>
           ) : (
             <>
@@ -163,17 +175,25 @@ export const PinAuthScreen = () => {
               ) : null}
               {!loginEmployeesLoading && loginEmployees.length === 0 ? (
                 <p className="text-sm text-amber-800">
-                  Активных сотрудников пока нет. Войдите owner-пользователем на другом устройстве
-                  и добавьте команду.
+                  {authError
+                    ? 'Не удалось получить список сотрудников. Проверьте подключение к Worker API.'
+                    : 'Активных сотрудников пока нет. Войдите owner-пользователем на другом устройстве и добавьте команду.'}
                 </p>
               ) : null}
               {error ? <p className="text-sm text-red-700">{error}</p> : null}
+              {authError ? <p className="text-sm text-red-700">{authError}</p> : null}
               <PrimaryButton
                 disabled={submitting || loginEmployeesLoading || loginEmployees.length === 0}
                 onClick={submitLogin}
               >
                 Войти
               </PrimaryButton>
+              <button
+                className="text-sm font-semibold text-clay"
+                onClick={() => void refreshLoginEmployees()}
+              >
+                Обновить список
+              </button>
             </>
           )}
         </Card>

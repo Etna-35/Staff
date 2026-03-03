@@ -66,7 +66,9 @@ type ActionResult = {
 type Store = AppState & {
   employeesLoading: boolean;
   loginEmployeesLoading: boolean;
+  authError: string | null;
   setTelegramName: (name: string) => void;
+  clearAuthError: () => void;
   loadBootstrapStatus: () => Promise<void>;
   loadMe: () => Promise<void>;
   refreshLoginEmployees: () => Promise<void>;
@@ -208,12 +210,17 @@ export const useAppStore = create<Store>()(
       ...normalizeState(cloneInitialState()),
       employeesLoading: false,
       loginEmployeesLoading: false,
+      authError: null,
       setTelegramName: (name) => set({ telegramName: name }),
+      clearAuthError: () => set({ authError: null }),
       loadBootstrapStatus: async () => {
+        set({ authError: null });
+
         try {
           const { bootstrapped } = await apiClient.getBootstrapStatus();
 
           set((state) => ({
+            authError: null,
             session: {
               ...state.session,
               bootstrapped,
@@ -224,13 +231,13 @@ export const useAppStore = create<Store>()(
           if (bootstrapped) {
             await get().refreshLoginEmployees().catch(() => undefined);
           }
-        } catch {
-          set((state) => ({
-            session: {
-              ...state.session,
-              bootstrapped: true,
-            },
-          }));
+        } catch (error) {
+          set({
+            authError:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось подключиться к серверу доступа.',
+          });
         }
       },
       loadMe: async () => {
@@ -238,6 +245,7 @@ export const useAppStore = create<Store>()(
 
         if (!token) {
           set((state) => ({
+            authError: null,
             session: {
               ...state.session,
               me: null,
@@ -251,6 +259,7 @@ export const useAppStore = create<Store>()(
           const me = applyEmployeeShape(await apiClient.getMe(token, () => get().logout()), currentMe ?? undefined);
 
           set((state) => ({
+            authError: null,
             employees:
               me.role === 'owner'
                 ? replaceEmployeeInList(state.employees, me)
@@ -267,6 +276,13 @@ export const useAppStore = create<Store>()(
           if (error instanceof ApiError && error.status === 401) {
             return;
           }
+
+          set({
+            authError:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось загрузить профиль сотрудника.',
+          });
         }
       },
       refreshLoginEmployees: async () => {
@@ -280,12 +296,16 @@ export const useAppStore = create<Store>()(
           const loginEmployees = await apiClient.getLoginEmployees();
 
           set({
+            authError: null,
             loginEmployees,
             loginEmployeesLoading: false,
           });
-        } catch {
+        } catch (error) {
           set({
-            loginEmployees: [],
+            authError:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось загрузить список сотрудников.',
             loginEmployeesLoading: false,
           });
         }
@@ -304,6 +324,7 @@ export const useAppStore = create<Store>()(
             pin,
           });
           set((state) => ({
+            authError: null,
             session: {
               ...state.session,
               bootstrapped: true,
@@ -345,6 +366,7 @@ export const useAppStore = create<Store>()(
             pin,
           });
           set((state) => ({
+            authError: null,
             session: {
               ...state.session,
               bootstrapped: true,
@@ -367,6 +389,7 @@ export const useAppStore = create<Store>()(
       },
       logout: () => {
         set((state) => ({
+          authError: null,
           session: {
             ...state.session,
             token: null,
@@ -391,6 +414,7 @@ export const useAppStore = create<Store>()(
           const employees = await apiClient.getEmployees(token, () => get().logout());
 
           set((state) => ({
+            authError: null,
             employees: employees.map((employee) =>
               applyEmployeeShape(
                 employee,
@@ -408,8 +432,14 @@ export const useAppStore = create<Store>()(
                 }
               : state.session,
           }));
-        } catch {
-          set({ employeesLoading: false });
+        } catch (error) {
+          set({
+            authError:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось загрузить список сотрудников.',
+            employeesLoading: false,
+          });
         }
       },
       setHourlyRate: async (rate) => {
@@ -496,6 +526,7 @@ export const useAppStore = create<Store>()(
           );
 
           set((state) => ({
+            authError: null,
             employees: replaceEmployeeInList(state.employees, employee),
             loginEmployees: [
               {
@@ -544,6 +575,7 @@ export const useAppStore = create<Store>()(
           );
 
           set((state) => ({
+            authError: null,
             employees: replaceEmployeeInList(state.employees, employee),
             session:
               state.session.me?.id === employee.id
@@ -584,6 +616,8 @@ export const useAppStore = create<Store>()(
         try {
           await apiClient.resetEmployeePin(token, employeeId, pin, () => get().logout());
 
+          set({ authError: null });
+
           return { ok: true };
         } catch (error) {
           return {
@@ -606,6 +640,7 @@ export const useAppStore = create<Store>()(
           await apiClient.deactivateEmployee(token, employeeId, () => get().logout());
 
           set((state) => ({
+            authError: null,
             employees: state.employees.map((employee) =>
               employee.id === employeeId
                 ? {
@@ -872,6 +907,7 @@ export const useAppStore = create<Store>()(
           ...normalized,
           employeesLoading: false,
           loginEmployeesLoading: false,
+          authError: null,
         };
       },
     },
