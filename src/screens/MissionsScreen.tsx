@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { useAppStore } from '../store/useAppStore';
+import { getCurrentEmployee, useAppStore } from '../store/useAppStore';
 import { Card, Input, Pill, PrimaryButton, SectionTitle, SecondaryButton } from '../components/ui';
 
 const statusText = {
@@ -10,9 +10,10 @@ const statusText = {
 } as const;
 
 export const MissionsScreen = () => {
-  const { tasks, role, createTask, markTaskDone, acceptTask, returnTask } = useAppStore();
+  const { tasks, createTask, markTaskDone, acceptTask, returnTask } = useAppStore();
+  const currentEmployee = useAppStore(getCurrentEmployee);
   const [title, setTitle] = useState('');
-  const [assignee, setAssignee] = useState('');
+  const [assignee, setAssignee] = useState(currentEmployee?.fullName ?? '');
   const [points, setPoints] = useState('10');
   const [returnReasons, setReturnReasons] = useState<Record<string, string>>({});
 
@@ -41,7 +42,7 @@ export const MissionsScreen = () => {
         <h1 className="font-display text-2xl font-semibold">Принятие без чатов</h1>
       </div>
 
-      {role === 'owner' ? (
+      {currentEmployee?.role === 'owner' ? (
         <Card>
           <SectionTitle title="Новая миссия" />
           <form className="space-y-3" onSubmit={submitTask}>
@@ -67,7 +68,7 @@ export const MissionsScreen = () => {
         </Card>
       ) : null}
 
-      {role === 'owner' ? (
+      {currentEmployee?.role === 'owner' ? (
         <Card>
           <SectionTitle title="На приемку" action={<Pill tone="warning">{pendingReview.length}</Pill>} />
           <div className="space-y-3">
@@ -154,4 +155,3 @@ export const MissionsScreen = () => {
     </div>
   );
 };
-

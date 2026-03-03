@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getAreaLabel, getCriticalityLabel, useAppStore } from '../store/useAppStore';
+import {
+  getAreaLabel,
+  getCriticalityLabel,
+  getCurrentEmployee,
+  useAppStore,
+} from '../store/useAppStore';
 import { Card, Input, Pill, SectionTitle } from '../components/ui';
 import type { HandoffArea } from '../types/domain';
 
@@ -8,6 +13,7 @@ const areaOrder: HandoffArea[] = ['kitchen', 'bar'];
 
 export const HandoffScreen = () => {
   const { handoffItems, toggleHandoffItem, updateHandoffReason } = useAppStore();
+  const currentEmployee = useAppStore(getCurrentEmployee);
   const [activeArea, setActiveArea] = useState<HandoffArea>('kitchen');
 
   const grouped = useMemo(
@@ -31,6 +37,17 @@ export const HandoffScreen = () => {
         </Link>
       </div>
 
+      {currentEmployee?.role === 'waiter' ? (
+        <Card>
+          <SectionTitle title="Передача недоступна" action={<Pill>Зал</Pill>} />
+          <p className="text-sm text-ink/60">
+            Для роли официанта этап передачи скрыт. Вернитесь в смену и продолжайте свои шаги.
+          </p>
+        </Card>
+      ) : null}
+
+      {currentEmployee?.role === 'waiter' ? null : (
+        <>
       <div className="grid grid-cols-2 gap-3">
         {grouped.map((group) => (
           <button
@@ -86,6 +103,8 @@ export const HandoffScreen = () => {
             </div>
           </Card>
         ))}
+        </>
+      )}
     </div>
   );
 };

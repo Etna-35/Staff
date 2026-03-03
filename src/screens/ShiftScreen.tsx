@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { appLinks } from '../config/links';
 import { initTelegramApp, getTelegramDisplayName } from '../lib/telegram';
-import { useAppStore } from '../store/useAppStore';
+import {
+  getCurrentEmployee,
+  getVisibleStageKeys,
+  useAppStore,
+} from '../store/useAppStore';
 import { Card, InlineLink, Pill, PrimaryButton, ProgressBar, SectionTitle, ShellHeader } from '../components/ui';
 
 const stageMeta: Record<
@@ -39,6 +43,7 @@ export const ShiftScreen = () => {
     completeStage,
     closeShift,
   } = useAppStore();
+  const currentEmployee = useAppStore(getCurrentEmployee);
   const [showPhotos, setShowPhotos] = useState(false);
 
   useEffect(() => {
@@ -48,8 +53,9 @@ export const ShiftScreen = () => {
 
   const stages = useMemo(() => {
     const handoffComplete = handoffItems.every((item) => item.checked && item.reason.trim());
+    const visibleKeys = getVisibleStageKeys(currentEmployee?.role ?? null);
 
-    return [
+    const allStages: { key: 'leftovers' | 'losses' | 'handoff' | 'closingPhotos'; done: boolean }[] = [
       {
         key: 'leftovers',
         done: shift.leftoversChecked,
@@ -66,8 +72,16 @@ export const ShiftScreen = () => {
         key: 'closingPhotos',
         done: shift.closingPhotosChecked,
       },
-    ] as const;
-  }, [handoffItems, losses.updatedAt, shift.closingPhotosChecked, shift.leftoversChecked]);
+    ];
+
+    return allStages.filter((stage) => visibleKeys.includes(stage.key));
+  }, [
+    currentEmployee?.role,
+    handoffItems,
+    losses.updatedAt,
+    shift.closingPhotosChecked,
+    shift.leftoversChecked,
+  ]);
 
   const completedCount = stages.filter((stage) => stage.done).length;
   const progress = Math.round((completedCount / stages.length) * 100);
@@ -75,7 +89,10 @@ export const ShiftScreen = () => {
 
   return (
     <div className="space-y-4">
-      <ShellHeader name={telegramName} subtitle={shift.dayLabel} />
+      <ShellHeader
+        name={currentEmployee?.fullName ?? telegramName}
+        subtitle={`${shift.dayLabel} · ${currentEmployee?.positionTitle ?? 'Сотрудник'}`}
+      />
 
       <Card className="space-y-4 bg-gradient-to-br from-white to-[#fff5dd]">
         <ProgressBar value={shift.closedAt ? 100 : progress} />

@@ -1,5 +1,6 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
-import { AppShell } from './components/AppShell';
+import { ProtectedRoot } from './components/ProtectedRoot';
+import { EmployeesScreen } from './screens/EmployeesScreen';
 import { HandoffScreen } from './screens/HandoffScreen';
 import { LossesScreen } from './screens/LossesScreen';
 import { MissionsScreen } from './screens/MissionsScreen';
@@ -11,7 +12,7 @@ import { TimesheetScreen } from './screens/TimesheetScreen';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <AppShell />,
+    element: <ProtectedRoot />,
     children: [
       {
         index: true,
@@ -32,6 +33,10 @@ export const router = createBrowserRouter([
       {
         path: 'profile/timesheet',
         element: <TimesheetScreen />,
+      },
+      {
+        path: 'profile/employees',
+        element: <EmployeesScreen />,
       },
       {
         path: 'shift/handoff',

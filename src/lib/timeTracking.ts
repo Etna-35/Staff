@@ -1,9 +1,4 @@
-import type {
-  StaffProfile,
-  StaffRolePreset,
-  TimeEntry,
-  TimesheetPeriod,
-} from '../types/domain';
+import type { Employee, EmployeeRole, TimeEntry, TimesheetPeriod } from '../types/domain';
 
 export const SHIFT_START_HOUR = 11;
 export const SHIFT_START_MINUTE = 20;
@@ -11,20 +6,31 @@ export const SHIFT_END_HOUR = 23;
 export const SHIFT_END_MINUTE = 20;
 export const MIN_SHIFT_MINUTES = 15;
 
-export const getPresetRate = (rolePreset: StaffRolePreset) => {
-  if (rolePreset === 'waiter') {
+export const getPresetRate = (role: EmployeeRole) => {
+  if (role === 'waiter') {
     return 190;
   }
 
-  if (rolePreset === 'bartender') {
+  if (role === 'bartender') {
     return 270;
   }
 
   return null;
 };
 
-export const resolveHourlyRate = (profile: StaffProfile) =>
-  getPresetRate(profile.rolePreset) ?? profile.hourlyRate;
+export const resolveHourlyRate = (employee: Employee) =>
+  getPresetRate(employee.role) ?? employee.hourlyRate;
+
+export const getDefaultPositionTitle = (role: EmployeeRole) => {
+  const labels: Record<EmployeeRole, string> = {
+    waiter: 'Официант',
+    bartender: 'Бармен',
+    chef: 'Повар',
+    owner: 'Админ',
+  };
+
+  return labels[role];
+};
 
 export const isBeforeShiftStart = (now: Date, shiftStart = '11:20') => {
   const [hourString, minuteString] = shiftStart.split(':');
@@ -64,8 +70,9 @@ export const calcEarnings = (
 };
 
 export const formatDuration = (hours: number) => {
-  const wholeHours = Math.floor(hours);
-  const minutes = Math.round((hours - wholeHours) * 60);
+  const safeHours = Number.isFinite(hours) ? Math.max(0, hours) : 0;
+  const wholeHours = Math.floor(safeHours);
+  const minutes = Math.round((safeHours - wholeHours) * 60);
 
   if (wholeHours <= 0) {
     return `${minutes} мин`;

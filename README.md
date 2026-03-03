@@ -13,9 +13,11 @@ Telegram Mini App MVP for restaurant staff operations. The app replaces shift ch
 - Shift dashboard with stage progress and gated close action
 - Missions flow with employee and owner acceptance states
 - Requests flow with local form storage and configurable external links
-- Profile with role switch, time tracking, hourly-rate setup, and privacy-hidden earnings
+- PIN access gate with local session, cooldown, and owner PIN bootstrap
+- Profile with employee card, logout, time tracking, hourly-rate setup, and privacy-hidden earnings
 - Timesheet screen with weekly/monthly shift history and early-start reasons
 - Owner team statistics for hours, shifts, early starts, and preliminary earnings
+- Owner employee management: add, edit, reset PIN, archive
 - Handoff screen for kitchen and bar
 - Losses screen with operational damage calculation
 - Telegram Mini App bootstrap via `telegram-web-app.js`
@@ -23,6 +25,7 @@ Telegram Mini App MVP for restaurant staff operations. The app replaces shift ch
 ## Project Structure
 - `src/config/links.ts`: all editable URLs in one place
 - `src/data/mock.ts`: seed data for a live-looking demo
+- `src/lib/pinAuth.ts`: local PIN hashing with WebCrypto
 - `src/lib/timeTracking.ts`: helper functions for shift rules and salary estimate
 - `src/store/useAppStore.ts`: local persisted state
 - `src/screens/*`: main app screens
@@ -114,6 +117,34 @@ Update these placeholders before real use:
 All are stored in:
 - `src/config/links.ts`
 
+## Access Control (PIN)
+- On first launch the app asks to set Owner PIN for `Юра`.
+- Until a valid PIN session exists, internal routes and bottom navigation are hidden.
+- PIN is stored only as `sha-256(pin + global salt + employee salt)`.
+- Five failed attempts lock local login for 5 minutes.
+
+## Managing Employees
+- Sign in as owner.
+- Open `Я` and then `Сотрудники`.
+- There you can:
+  - add employee with role, position title, and PIN
+  - edit role and active status
+  - reset PIN
+  - archive employee without deleting history
+
+## Local Storage
+This MVP stores all data locally in browser storage via Zustand persist:
+- employees
+- session
+- tasks
+- requests
+- time entries
+
+If you need a full reset:
+1. Open browser site settings for the app domain.
+2. Clear local storage / site data.
+3. Reload the app and create Owner PIN again.
+
 ## Timesheet Usage
 - Open `Я` to start or end a shift.
 - Starting before `11:20` requires a reason.
@@ -124,8 +155,8 @@ All are stored in:
 ## Hourly Rates And Salary Estimate
 - Waiters: `190 ₽ / hour`
 - Bartenders: `270 ₽ / hour`
-- Cooks: editable in profile
-- Custom roles: editable in profile
+- Chefs: editable in profile
+- Owners: optional editable rate in profile
 
 Earnings are estimated locally as:
 
@@ -137,9 +168,10 @@ The amount is intentionally hidden behind a temporary eye toggle and always mark
 - `≈ Предварительный расчёт`
 
 This is for personal reference only and not a payroll source of truth.
+This is also not a payroll-grade security model.
 
 ## Owner Statistics
-- Switch to `Owner/Admin` in profile to see team statistics.
+- Login as owner to see team statistics and employee management.
 - Available filters:
   - period: today / week / month
   - department: kitchen / bar / hall / other
@@ -148,13 +180,14 @@ This is for personal reference only and not a payroll source of truth.
 
 ## MVP Limits
 - No backend
-- No secure authentication
+- No strong authentication
 - No real file upload
 - No Telegram user authorization checks yet
+- No external access-control service
 
 ## Next Backend Step
 When moving to Supabase later:
 - replace Zustand persistence with remote tables,
-- map role by Telegram user ID whitelist,
+- replace local PIN gate with Telegram user ID whitelist or backend auth,
 - move request/task acceptance to real multi-user sync,
 - add secure verification of Telegram init data on backend.

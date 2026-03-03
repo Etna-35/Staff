@@ -1,4 +1,4 @@
-export type Role = 'employee' | 'owner';
+export type EmployeeRole = 'waiter' | 'bartender' | 'chef' | 'owner';
 
 export type MissionStatus = 'assigned' | 'done' | 'accepted' | 'returned';
 
@@ -11,8 +11,6 @@ export type HandoffArea = 'kitchen' | 'bar';
 export type StageKey = 'leftovers' | 'losses' | 'handoff' | 'closingPhotos';
 
 export type TeamDepartment = 'kitchen' | 'bar' | 'hall' | 'other';
-
-export type StaffRolePreset = 'waiter' | 'bartender' | 'cook' | 'custom';
 
 export type TimesheetPeriod = 'day' | 'week' | 'month';
 
@@ -63,19 +61,33 @@ export type Request = {
   createdAt: string;
 };
 
-export type StaffProfile = {
+export type Employee = {
   id: string;
-  name: string;
+  fullName: string;
+  role: EmployeeRole;
+  positionTitle: string;
+  pinHash: string;
+  pinSalt: string;
+  isActive: boolean;
+  createdAt: string;
   department: TeamDepartment;
-  rolePreset: StaffRolePreset;
-  tenureLabel?: string;
   hourlyRate: number | null;
+  tenureLabel?: string;
+};
+
+export type SessionState = {
+  isAuthenticated: boolean;
+  employeeId: string | null;
+  lastAuthAt: string | null;
+  rememberMe: boolean;
+  failedAttempts: number;
+  lockUntil: string | null;
 };
 
 export type TimeEntry = {
   id: string;
   userId: string;
-  rolePreset: StaffRolePreset;
+  role: EmployeeRole;
   startAt: string;
   endAt: string | null;
   earlyStart: boolean;
@@ -84,14 +96,13 @@ export type TimeEntry = {
 };
 
 export type AppState = {
-  role: Role;
   telegramName: string;
-  currentUserId: string;
   shift: Shift;
   tasks: Task[];
   losses: Losses;
   handoffItems: HandoffItem[];
   requests: Request[];
-  staffProfiles: StaffProfile[];
+  employees: Employee[];
+  session: SessionState;
   timeEntries: TimeEntry[];
 };

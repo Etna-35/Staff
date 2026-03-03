@@ -11,7 +11,7 @@ import {
 } from '../lib/timeTracking';
 import {
   getCurrentActiveEntry,
-  getCurrentProfile,
+  getCurrentEmployee,
   getProfileRate,
   useAppStore,
 } from '../store/useAppStore';
@@ -24,16 +24,20 @@ const periodLabels: Record<Exclude<TimesheetPeriod, 'day'>, string> = {
 };
 
 export const TimesheetScreen = () => {
-  const { timeEntries, currentUserId, endCurrentTimeEntry } = useAppStore();
-  const currentProfile = useAppStore(getCurrentProfile);
+  const { timeEntries, endCurrentTimeEntry } = useAppStore();
+  const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
   const [period, setPeriod] = useState<Exclude<TimesheetPeriod, 'day'>>('week');
   const [shortShiftPrompt, setShortShiftPrompt] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  if (!currentEmployee) {
+    return null;
+  }
+
   const myEntries = useMemo(
-    () => timeEntries.filter((entry) => entry.userId === currentUserId),
-    [currentUserId, timeEntries],
+    () => timeEntries.filter((entry) => entry.userId === currentEmployee.id),
+    [currentEmployee.id, timeEntries],
   );
   const filteredEntries = useMemo(
     () => getPeriodEntries(myEntries, period).sort((a, b) => b.startAt.localeCompare(a.startAt)),
@@ -51,7 +55,7 @@ export const TimesheetScreen = () => {
   );
   const todayEarned = calcEarnings(
     myEntries.filter((entry) => entry.endAt && isSameDay(new Date(entry.endAt), new Date())),
-    getProfileRate(currentProfile),
+    getProfileRate(currentEmployee),
   );
 
   const onCloseNow = (force = false) => {

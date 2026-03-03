@@ -11,12 +11,12 @@ import {
 } from '../lib/timeTracking';
 import {
   getCurrentActiveEntry,
-  getCurrentProfile,
+  getCurrentEmployee,
   getDepartmentLabel,
   getEntriesForPeriod,
   getEntriesHours,
   getProfileRate,
-  getRolePresetLabel,
+  getRoleLabel,
   getTeamStats,
   useAppStore,
 } from '../store/useAppStore';
@@ -60,12 +60,12 @@ const StatValue = ({
 
 const OwnerStats = () => {
   const state = useAppStore();
-  const { staffProfiles, role } = state;
+  const currentEmployee = useAppStore(getCurrentEmployee);
   const [period, setPeriod] = useState<TimesheetPeriod>('week');
   const [department, setDepartment] = useState<TeamDepartment | 'all'>('all');
   const [userId, setUserId] = useState<string | 'all'>('all');
 
-  if (role !== 'owner') {
+  if (currentEmployee?.role !== 'owner') {
     return null;
   }
 
@@ -92,7 +92,14 @@ const OwnerStats = () => {
 
   return (
     <Card>
-      <SectionTitle title="Статистика команды" action={<Pill tone="warning">Owner</Pill>} />
+      <SectionTitle
+        title="Owner Dashboard"
+        action={
+          <Link className="text-sm font-semibold text-clay" to="/profile/employees">
+            Сотрудники
+          </Link>
+        }
+      />
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-2xl bg-fog p-3">
           <p className="text-xs text-ink/45">Сегодня</p>
@@ -133,22 +140,23 @@ const OwnerStats = () => {
         </Select>
         <Select value={userId} onChange={(event) => setUserId(event.target.value)}>
           <option value="all">Все сотрудники</option>
-          {staffProfiles.map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              {profile.name}
-            </option>
-          ))}
+          {state.employees
+            .filter((employee) => employee.isActive)
+            .map((employee) => (
+              <option key={employee.id} value={employee.id}>
+                {employee.fullName}
+              </option>
+            ))}
         </Select>
       </div>
       <div className="mt-4 space-y-3">
         {filtered.rows.map((row) => (
-          <div key={row.profile.id} className="rounded-2xl bg-fog p-3">
+          <div key={row.employee.id} className="rounded-2xl bg-fog p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-semibold">{row.profile.name}</p>
+                <p className="font-semibold">{row.employee.fullName}</p>
                 <p className="text-sm text-ink/55">
-                  {getRolePresetLabel(row.profile.rolePreset)} ·{' '}
-                  {getDepartmentLabel(row.profile.department)}
+                  {row.employee.positionTitle} · {getDepartmentLabel(row.employee.department)}
                 </p>
               </div>
               <Pill>{row.hours.toFixed(1)} ч</Pill>
@@ -156,19 +164,19 @@ const OwnerStats = () => {
             <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs">
               <div className="rounded-2xl bg-white/70 p-2">
                 <p className="text-ink/45">Смен</p>
-                <p className="mt-1 font-semibold text-sm">{row.shifts}</p>
+                <p className="mt-1 text-sm font-semibold">{row.shifts}</p>
               </div>
               <div className="rounded-2xl bg-white/70 p-2">
                 <p className="text-ink/45">Часы</p>
-                <p className="mt-1 font-semibold text-sm">{row.hours.toFixed(1)}</p>
+                <p className="mt-1 text-sm font-semibold">{row.hours.toFixed(1)}</p>
               </div>
               <div className="rounded-2xl bg-white/70 p-2">
                 <p className="text-ink/45">Ранние</p>
-                <p className="mt-1 font-semibold text-sm">{row.earlyStarts}</p>
+                <p className="mt-1 text-sm font-semibold">{row.earlyStarts}</p>
               </div>
               <div className="rounded-2xl bg-white/70 p-2">
                 <p className="text-ink/45">Сумма</p>
-                <p className="mt-1 font-semibold text-sm">{row.earnings.toFixed(0)} ₽</p>
+                <p className="mt-1 text-sm font-semibold">{row.earnings.toFixed(0)} ₽</p>
               </div>
             </div>
           </div>
@@ -180,21 +188,19 @@ const OwnerStats = () => {
 
 export const ProfileScreen = () => {
   const {
-    role,
-    setRole,
     tasks,
     losses,
     resetDemo,
     telegramName,
     timeEntries,
-    currentUserId,
     setHourlyRate,
     startTimeEntry,
     endCurrentTimeEntry,
+    logout,
   } = useAppStore();
-  const currentProfile = useAppStore(getCurrentProfile);
+  const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
-  const [rateInput, setRateInput] = useState(currentProfile?.hourlyRate?.toString() ?? '');
+  const [rateInput, setRateInput] = useState(currentEmployee?.hourlyRate?.toString() ?? '');
   const [showEarlyStartModal, setShowEarlyStartModal] = useState(false);
   const [earlyReason, setEarlyReason] = useState('');
   const [shortShiftPrompt, setShortShiftPrompt] = useState(false);
@@ -202,8 +208,8 @@ export const ProfileScreen = () => {
   const [earningsVisible, setEarningsVisible] = useState(false);
 
   useEffect(() => {
-    setRateInput(currentProfile?.hourlyRate?.toString() ?? '');
-  }, [currentProfile?.hourlyRate]);
+    setRateInput(currentEmployee?.hourlyRate?.toString() ?? '');
+  }, [currentEmployee?.hourlyRate]);
 
   useEffect(() => {
     if (!earningsVisible) {
@@ -215,6 +221,10 @@ export const ProfileScreen = () => {
     return () => window.clearTimeout(timer);
   }, [earningsVisible]);
 
+  if (!currentEmployee) {
+    return null;
+  }
+
   const acceptedTasks = tasks.filter((task) => task.status === 'accepted').length;
   const waitingTasks = tasks.filter((task) => task.status === 'done').length;
   const overdueTasks = tasks.filter((task) => task.status === 'returned').length;
@@ -222,7 +232,7 @@ export const ProfileScreen = () => {
     .filter((task) => task.status === 'accepted')
     .reduce((sum, task) => sum + task.points, 0);
   const weeklyLoss = losses.spoilage + losses.staffMeal;
-  const myEntries = timeEntries.filter((entry) => entry.userId === currentUserId);
+  const myEntries = timeEntries.filter((entry) => entry.userId === currentEmployee.id);
   const weekEntries = getEntriesForPeriod(myEntries, 'week');
   const monthEntries = getEntriesForPeriod(myEntries, 'month');
   const todayClosedEntries = myEntries.filter(
@@ -230,13 +240,12 @@ export const ProfileScreen = () => {
   );
   const weeklyHours = getEntriesHours(weekEntries);
   const monthlyHours = getEntriesHours(monthEntries);
-  const resolvedRate = getProfileRate(currentProfile);
+  const resolvedRate = getProfileRate(currentEmployee);
   const estimatedIncome = calcEarnings(monthEntries, resolvedRate);
   const todayEarned = calcEarnings(todayClosedEntries, resolvedRate);
   const isFixedRate =
-    currentProfile?.rolePreset === 'waiter' || currentProfile?.rolePreset === 'bartender';
-  const presetRate = currentProfile ? getPresetRate(currentProfile.rolePreset) : null;
-  const displayName = telegramName || currentProfile?.name || 'Сотрудник';
+    currentEmployee.role === 'waiter' || currentEmployee.role === 'bartender';
+  const presetRate = getPresetRate(currentEmployee.role);
   const workedNowLabel = activeEntry
     ? formatDuration(durationHours(activeEntry.startAt, null))
     : null;
@@ -300,33 +309,21 @@ export const ProfileScreen = () => {
       </div>
 
       <Card>
-        <SectionTitle title="Профиль" action={<Pill>{role === 'owner' ? 'Owner/Admin' : 'Employee'}</Pill>} />
+        <SectionTitle
+          title="Профиль"
+          action={<Pill>{currentEmployee.role === 'owner' ? 'Owner' : 'Staff'}</Pill>}
+        />
         <div className="space-y-4">
           <div className="rounded-2xl bg-fog p-4">
             <p className="text-xs text-ink/45">Имя</p>
-            <p className="mt-2 text-xl font-semibold">{displayName}</p>
+            <p className="mt-2 text-xl font-semibold">{currentEmployee.fullName}</p>
             <p className="mt-1 text-sm text-ink/55">
-              {currentProfile ? getRolePresetLabel(currentProfile.rolePreset) : 'Сотрудник'}
-              {currentProfile?.tenureLabel ? ` · стаж ${currentProfile.tenureLabel}` : ''}
+              {getRoleLabel(currentEmployee.role)} · {currentEmployee.positionTitle}
+              {currentEmployee.tenureLabel ? ` · стаж ${currentEmployee.tenureLabel}` : ''}
             </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
-                role === 'employee' ? 'bg-ink text-white' : 'bg-fog text-ink'
-              }`}
-              onClick={() => setRole('employee')}
-            >
-              Employee
-            </button>
-            <button
-              className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
-                role === 'owner' ? 'bg-ink text-white' : 'bg-fog text-ink'
-              }`}
-              onClick={() => setRole('owner')}
-            >
-              Owner/Admin
-            </button>
+            <p className="mt-2 text-xs text-ink/45">
+              Telegram: {telegramName || 'без имени'}
+            </p>
           </div>
           <div>
             <p className="mb-2 text-sm font-semibold text-ink">Моя ставка</p>
@@ -353,11 +350,19 @@ export const ProfileScreen = () => {
               </div>
             )}
           </div>
+          <SecondaryButton onClick={logout}>Выйти</SecondaryButton>
         </div>
       </Card>
 
       <Card>
-        <SectionTitle title="Табель" action={<Link to="/profile/timesheet" className="text-sm font-semibold text-clay">Открыть</Link>} />
+        <SectionTitle
+          title="Табель"
+          action={
+            <Link className="text-sm font-semibold text-clay" to="/profile/timesheet">
+              Открыть
+            </Link>
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-fog p-3">
             <p className="text-xs text-ink/45">Неделя</p>
@@ -372,7 +377,8 @@ export const ProfileScreen = () => {
           <div className="mt-4 rounded-2xl border border-clay/30 bg-clay/10 p-4">
             <p className="font-semibold text-ink">У вас открыта смена</p>
             <p className="mt-1 text-sm text-ink/60">
-              Идет {workedNowLabel} · старт {new Date(activeEntry.startAt).toLocaleTimeString('ru-RU', {
+              Идет {workedNowLabel} · старт{' '}
+              {new Date(activeEntry.startAt).toLocaleTimeString('ru-RU', {
                 hour: '2-digit',
                 minute: '2-digit',
               })}
@@ -416,12 +422,10 @@ export const ProfileScreen = () => {
         <StatValue value={`${estimatedIncome.toFixed(0)} ₽`} visible={earningsVisible} />
       </Card>
 
-      {todayClosedEntries.length > 0 ? (
-        <Card>
-          <SectionTitle title="Сегодня заработано" />
-          <StatValue value={`${todayEarned.toFixed(0)} ₽`} visible={earningsVisible} />
-        </Card>
-      ) : null}
+      <Card>
+        <SectionTitle title="Сегодня заработано" />
+        <StatValue value={`${todayEarned.toFixed(0)} ₽`} visible={earningsVisible} />
+      </Card>
 
       <div className="grid grid-cols-2 gap-3">
         <Card className="bg-white/80">
@@ -489,10 +493,7 @@ export const ProfileScreen = () => {
               onChange={(event) => setEarlyReason(event.target.value)}
             />
             <div className="mt-4 flex gap-3">
-              <PrimaryButton
-                disabled={!earlyReason.trim()}
-                onClick={confirmEarlyStart}
-              >
+              <PrimaryButton disabled={!earlyReason.trim()} onClick={confirmEarlyStart}>
                 Открыть с причиной
               </PrimaryButton>
               <button
