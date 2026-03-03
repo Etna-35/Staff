@@ -1,193 +1,207 @@
 # Restaurant OS MVP
 
-Telegram Mini App MVP for restaurant staff operations. The app replaces shift chat chaos with one mobile-first interface for shift progress, missions, requests, losses, and handoff.
+Telegram Mini App MVP for restaurant staff operations. The app combines local shift workflows with a shared Cloudflare Worker API for employees, roles, PIN login, and cross-device access.
 
 ## Stack
 - React + TypeScript
 - Vite
 - Tailwind CSS
 - Zustand
-- Cloudflare Pages static deploy
+- Cloudflare Pages for frontend
+- Cloudflare Worker + Workers KV for shared employee access
 
 ## Features Included
 - Shift dashboard with stage progress and gated close action
 - Missions flow with employee and owner acceptance states
 - Requests flow with local form storage and configurable external links
-- PIN access gate with local session, cooldown, and owner PIN bootstrap
+- Shared PIN access via Worker API and KV
+- One-time owner bootstrap across all devices
+- Owner employee management: add, edit, reset PIN, archive
 - Profile with employee card, logout, time tracking, hourly-rate setup, and privacy-hidden earnings
 - Timesheet screen with weekly/monthly shift history and early-start reasons
 - Owner team statistics for hours, shifts, early starts, and preliminary earnings
-- Owner employee management: add, edit, reset PIN, archive
 - Handoff screen for kitchen and bar
 - Losses screen with operational damage calculation
 - Telegram Mini App bootstrap via `telegram-web-app.js`
 
 ## Project Structure
-- `src/config/links.ts`: all editable URLs in one place
-- `src/data/mock.ts`: seed data for a live-looking demo
-- `src/lib/pinAuth.ts`: local PIN hashing with WebCrypto
-- `src/lib/timeTracking.ts`: helper functions for shift rules and salary estimate
-- `src/store/useAppStore.ts`: local persisted state
-- `src/screens/*`: main app screens
-- `docs/PRODUCT_SPEC.md`: MVP spec and done criteria
+- `src/api/client.ts`: frontend API wrapper for Worker endpoints
+- `src/config/links.ts`: editable URLs
+- `src/data/mock.ts`: local demo seed for shift data
+- `src/lib/timeTracking.ts`: shift rules and salary helpers
+- `src/store/useAppStore.ts`: Zustand state, local persistence, auth bootstrap
+- `src/screens/*`: route-level UI
+- `worker/src/index.ts`: Cloudflare Worker API
+- `worker/wrangler.toml`: Worker config
+- `docs/PRODUCT_SPEC.md`: product behavior and done criteria
 
-## Local Setup
-1. Install Node.js 20+.
-2. Install dependencies:
-
+## Install
 ```bash
 npm install
 ```
 
-3. Start local development:
+## Frontend Dev
+Run Vite:
 
 ```bash
 npm run dev
 ```
 
-Expected result:
-- Vite starts a local server, typically on `http://localhost:5173`.
-- In a regular browser the app runs with fallback name `Гость смены`.
-- In Telegram WebView the app calls `tg.ready()` and `tg.expand()` and shows the Telegram user display name from `initDataUnsafe.user`.
-- Routes work as a standard SPA on Cloudflare Pages without `#` in the URL.
-
-## Production Build
-Run:
+If the Worker API is on another origin, set the API base URL:
 
 ```bash
-npm run build
+VITE_API_BASE_URL=http://127.0.0.1:8787 npm run dev
 ```
 
 Expected result:
-- TypeScript passes.
-- Vite creates a static `dist/` directory for Cloudflare Pages.
+- Vite starts on `http://localhost:5173`
+- Browser fallback works outside Telegram
+- Telegram WebView still calls `tg.ready()` and `tg.expand()`
 
-Optional checks:
+## Worker Setup
+1. Create KV namespace:
 
 ```bash
+npx wrangler kv namespace create STAFF_KV
+```
+
+2. Copy the returned namespace IDs into [worker/wrangler.toml](/Users/rio/Desktop/EtnaStaff/worker/wrangler.toml)
+3. Set the origin allowed to call the API:
+   - `ALLOWED_ORIGIN = "https://<your-pages-domain>"`
+4. Put the session signing secret:
+
+```bash
+npx wrangler secret put SESSION_SECRET --config worker/wrangler.toml
+```
+
+5. Start the Worker locally:
+
+```bash
+npm run worker:dev
+```
+
+6. In a second terminal run the frontend against the Worker:
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8787 npm run dev
+```
+
+## Worker Deploy
+Deploy the shared access backend:
+
+```bash
+npm run worker:deploy
+```
+
+After deploy you will get a Worker URL like:
+- `https://restaurant-os-api.<account>.workers.dev`
+
+Use that value as `VITE_API_BASE_URL` in Cloudflare Pages.
+
+## Cloudflare Pages Deploy
+1. Push the repo to GitHub
+2. Create or update the Pages project
+3. Use:
+   - Build command: `npm run build`
+   - Build output directory: `dist`
+   - Node.js version: `20`
+4. Add Pages environment variable:
+   - `VITE_API_BASE_URL=https://<your-worker>.workers.dev`
+5. Deploy
+
+## Build And Checks
+```bash
+npm run build
 npm run lint
 npm run typecheck
 ```
 
-## Cloudflare Pages Deploy
-1. Push the repository to GitHub.
-2. In Cloudflare Pages create a new project from the repo.
-3. Use these build settings:
-   - Framework preset: `Vite`
-   - Node.js version: `20`
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-4. Deploy.
+Expected result:
+- `dist/` is generated for Cloudflare Pages
+- frontend typecheck passes
+- Worker code stays separate and does not affect static Pages build
 
-No runtime secrets are required for this MVP.
-
-## Cloudflare Pages Via Wrangler
-If you prefer CLI deploys:
-
-```bash
-npm run build
-npx wrangler pages deploy dist
-```
-
-Project config is already prepared in:
-- `wrangler.toml`
-
-## Pre-Deploy Checklist
-- Replace placeholder URLs in `src/config/links.ts`
-- Confirm `npm run build` passes locally
-- Verify the production output exists in `dist/`
-- Deploy to Cloudflare Pages and copy the final HTTPS URL
-
-## Telegram BotFather Setup
-1. Deploy the app and copy the public HTTPS URL from Cloudflare Pages.
-2. Open BotFather.
-3. Configure your bot menu button or Web App button to use the deployed URL.
-4. Open the Mini App from Telegram and confirm:
-   - the WebView expands,
-   - the username appears,
-   - the bottom navigation and screens render correctly.
-
-## Configurable Links
-Update these placeholders before real use:
-- Knowledge base URL
-- Task chat URL
-- Closing photo checklist URL
-- Yandex form URLs for kitchen, bar, and supplies
-
-All are stored in:
-- `src/config/links.ts`
-
-## Access Control (PIN)
-- On first launch the app asks to set Owner PIN for `Юра`.
-- Until a valid PIN session exists, internal routes and bottom navigation are hidden.
-- PIN is stored only as `sha-256(pin + global salt + employee salt)`.
-- Five failed attempts lock local login for 5 minutes.
+## Access Control Flow
+- First device opens the app
+- Frontend calls `GET /api/bootstrap/status`
+- If not bootstrapped, it shows `Создать PIN основателя`
+- Bootstrap calls `POST /api/bootstrap` and creates the only initial owner
+- Every next device sees `bootstrapped=true` and goes straight to login
+- Login uses:
+  - `GET /api/employees` for active public employee list
+  - `POST /api/auth/login` for PIN verification
+- Frontend stores only the session token locally
+- On app start the token is verified through `GET /api/me`
 
 ## Managing Employees
-- Sign in as owner.
-- Open `Я` and then `Сотрудники`.
-- There you can:
-  - add employee with role, position title, and PIN
-  - edit role and active status
+- Log in as owner
+- Open `Я`
+- Open `Сотрудники`
+- Available actions:
+  - add employee with role and PIN
+  - edit role, title, active state
   - reset PIN
   - archive employee without deleting history
 
 ## Local Storage
-This MVP stores all data locally in browser storage via Zustand persist:
-- employees
-- session
-- tasks
+Still local:
+- shift demo state
+- missions
 - requests
-- time entries
+- losses
+- handoff
+- timesheet entries
+- session token
 
-If you need a full reset:
-1. Open browser site settings for the app domain.
-2. Clear local storage / site data.
-3. Reload the app and create Owner PIN again.
+No longer local-only:
+- employees
+- roles
+- PIN hashes
+- bootstrap owner state
+- login authorization
+
+If you need to reset only frontend state:
+1. Clear site data for the Pages domain
+2. Reload the app
+
+If you need to reset shared employee access:
+1. Clear the Worker KV namespace manually
+2. Bootstrap owner again
 
 ## Timesheet Usage
-- Open `Я` to start or end a shift.
-- Starting before `11:20` requires a reason.
-- If an open shift already exists, the UI highlights it and prevents opening another one.
-- If a shift is shorter than `15 minutes`, closing requires extra confirmation.
-- `Табель` shows weekly and monthly entries with duration and early-start notes.
+- Open `Я` to start or end a shift
+- Starting before `11:20` requires a reason
+- One active shift per employee
+- Closing a shift shorter than `15 minutes` requires confirmation
+- `Табель` shows week/month entries and early-start reasons
+- Salary numbers are still local and marked `≈ Предварительный расчёт`
 
-## Hourly Rates And Salary Estimate
-- Waiters: `190 ₽ / hour`
-- Bartenders: `270 ₽ / hour`
-- Chefs: editable in profile
-- Owners: optional editable rate in profile
+## Telegram BotFather Setup
+1. Deploy Pages and Worker
+2. Use the Pages HTTPS URL in BotFather
+3. Confirm the Pages build has `VITE_API_BASE_URL` pointed to the deployed Worker
+4. Open the Mini App inside Telegram and verify:
+   - WebView expands
+   - username displays from Telegram
+   - PIN login works
+   - employee list matches other devices
 
-Earnings are estimated locally as:
+## E2E Checklist
+1. Device A opens the app and sees bootstrap screen
+2. Device A creates owner PIN
+3. Device B opens the app and immediately sees login, not bootstrap
+4. Owner logs in on A and adds a new employee
+5. Device B refreshes and sees the new employee in login list
+6. New employee logs in on B with assigned PIN
+7. Non-owner cannot open employee management
+8. Owner can reset employee PIN on A
+9. Employee can use the new PIN on B
+10. Calling protected endpoints without token returns `401`
 
-```text
-worked hours × hourly rate
-```
+## Security Note
+This is lightweight protection for staff-only access. It prevents casual access and keeps employee settings shared between devices, but it is not strong identity verification.
 
-The amount is intentionally hidden behind a temporary eye toggle and always marked as:
-- `≈ Предварительный расчёт`
-
-This is for personal reference only and not a payroll source of truth.
-This is also not a payroll-grade security model.
-
-## Owner Statistics
-- Login as owner to see team statistics and employee management.
-- Available filters:
-  - period: today / week / month
-  - department: kitchen / bar / hall / other
-  - employee: all or one person
-- Rows are sorted by worked hours descending.
-
-## MVP Limits
-- No backend
-- No strong authentication
-- No real file upload
-- No Telegram user authorization checks yet
-- No external access-control service
-
-## Next Backend Step
-When moving to Supabase later:
-- replace Zustand persistence with remote tables,
-- replace local PIN gate with Telegram user ID whitelist or backend auth,
-- move request/task acceptance to real multi-user sync,
-- add secure verification of Telegram init data on backend.
+Stronger next step:
+- whitelist by Telegram `user_id`
+- backend validation of Telegram init data
+- revocable sessions and audit trail

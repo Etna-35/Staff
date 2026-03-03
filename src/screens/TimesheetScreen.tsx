@@ -30,14 +30,14 @@ export const TimesheetScreen = () => {
   const [period, setPeriod] = useState<Exclude<TimesheetPeriod, 'day'>>('week');
   const [shortShiftPrompt, setShortShiftPrompt] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
-
-  if (!currentEmployee) {
-    return null;
-  }
+  const currentEmployeeId = currentEmployee?.id ?? null;
 
   const myEntries = useMemo(
-    () => timeEntries.filter((entry) => entry.userId === currentEmployee.id),
-    [currentEmployee.id, timeEntries],
+    () =>
+      currentEmployeeId
+        ? timeEntries.filter((entry) => entry.userId === currentEmployeeId)
+        : [],
+    [currentEmployeeId, timeEntries],
   );
   const filteredEntries = useMemo(
     () => getPeriodEntries(myEntries, period).sort((a, b) => b.startAt.localeCompare(a.startAt)),
@@ -57,6 +57,10 @@ export const TimesheetScreen = () => {
     myEntries.filter((entry) => entry.endAt && isSameDay(new Date(entry.endAt), new Date())),
     getProfileRate(currentEmployee),
   );
+
+  if (!currentEmployee) {
+    return null;
+  }
 
   const onCloseNow = (force = false) => {
     const result = endCurrentTimeEntry({ force });

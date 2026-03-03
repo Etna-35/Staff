@@ -1,17 +1,12 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  getCurrentEmployee,
-  getRoleLabel,
-  useAppStore,
-} from '../store/useAppStore';
+import { getCurrentEmployee, getRoleLabel, useAppStore } from '../store/useAppStore';
 import type { Employee, EmployeeRole } from '../types/domain';
 import {
   Card,
   Input,
   Pill,
   PrimaryButton,
-  SecondaryButton,
   SectionTitle,
   Select,
 } from '../components/ui';
@@ -45,6 +40,8 @@ const emptyAddForm: AddFormState = {
 export const EmployeesScreen = () => {
   const {
     employees,
+    employeesLoading,
+    loadEmployees,
     createEmployee,
     updateEmployee,
     resetEmployeePin,
@@ -57,6 +54,13 @@ export const EmployeesScreen = () => {
   const [resetPinEmployee, setResetPinEmployee] = useState<Employee | null>(null);
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (currentEmployee?.role === 'owner') {
+      void loadEmployees();
+    }
+  }, [currentEmployee?.role, loadEmployees]);
 
   const activeEmployees = useMemo(
     () => employees.filter((employee) => employee.isActive),
@@ -95,6 +99,7 @@ export const EmployeesScreen = () => {
       return;
     }
 
+    setSubmitting(true);
     const result = await createEmployee({
       fullName: addForm.fullName,
       role: addForm.role,
@@ -102,6 +107,7 @@ export const EmployeesScreen = () => {
       pin: addForm.pin,
       hourlyRate: addForm.role === 'chef' ? Number(addForm.hourlyRate) || null : null,
     });
+    setSubmitting(false);
 
     if (!result.ok) {
       setError(result.reason ?? 'Не удалось создать сотрудника');
@@ -111,12 +117,22 @@ export const EmployeesScreen = () => {
     setAddForm(emptyAddForm);
   };
 
-  const submitEdit = () => {
+  const submitEdit = async () => {
     if (!editingEmployee) {
       return;
     }
 
-    const result = updateEmployee(editingEmployee.id, editingEmployee);
+    setError(null);
+    setSubmitting(true);
+    const result = await updateEmployee(editingEmployee.id, {
+      fullName: editingEmployee.fullName,
+      role: editingEmployee.role,
+      positionTitle: editingEmployee.positionTitle,
+      isActive: editingEmployee.isActive,
+      hourlyRate: editingEmployee.hourlyRate,
+      tenureLabel: editingEmployee.tenureLabel ?? null,
+    });
+    setSubmitting(false);
 
     if (!result.ok) {
       setError(result.reason ?? 'Не удалось обновить сотрудника');
@@ -136,7 +152,9 @@ export const EmployeesScreen = () => {
       return;
     }
 
+    setSubmitting(true);
     const result = await resetEmployeePin(resetPinEmployee.id, newPin);
+    setSubmitting(false);
 
     if (!result.ok) {
       setError(result.reason ?? 'Не удалось сбросить PIN');
@@ -146,6 +164,28 @@ export const EmployeesScreen = () => {
     setResetPinEmployee(null);
     setNewPin('');
     setConfirmNewPin('');
+  };
+
+  const archiveEmployee = async (employeeId: string) => {
+    setError(null);
+    setSubmitting(true);
+    const result = await deactivateEmployee(employeeId);
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(result.reason ?? 'Не удалось деактивировать');
+    }
+  };
+
+  const restoreEmployee = async (employeeId: string) => {
+    setError(null);
+    setSubmitting(true);
+    const result = await updateEmployee(employeeId, { isActive: true });
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(result.reason ?? 'Не удалось вернуть сотрудника');
+    }
   };
 
   return (
@@ -227,12 +267,15 @@ export const EmployeesScreen = () => {
             }
           />
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
-          <PrimaryButton type="submit">Сохранить сотрудника</PrimaryButton>
+          <PrimaryButton disabled={submitting} type="submit">
+            Сохранить сотрудника
+          </PrimaryButton>
         </form>
       </Card>
 
       <Card>
         <SectionTitle title="Активные" action={<Pill>{activeEmployees.length}</Pill>} />
+        {employeesLoading ? <p className="text-sm text-ink/55">Загружаем сотрудников…</p> : null}
         <div className="space-y-3">
           {activeEmployees.map((employee) => (
             <div key={employee.id} className="rounded-2xl bg-fog p-3">
@@ -243,7 +286,7 @@ export const EmployeesScreen = () => {
                     {employee.positionTitle} · {getRoleLabel(employee.role)}
                   </p>
                 </div>
-                <Pill>{employee.pinHash ? 'PIN задан' : 'Без PIN'}</Pill>
+                <Pill>{employee.hasPin ? 'PIN задан' : 'Без PIN'}</Pill>
               </div>
               <div className="mt-3 flex gap-2">
                 <button
@@ -267,12 +310,7 @@ export const EmployeesScreen = () => {
                 {employee.role !== 'owner' ? (
                   <button
                     className="rounded-2xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                    onClick={() => {
-                      const result = deactivateEmployee(employee.id);
-                      if (!result.ok) {
-                        setError(result.reason ?? 'Не удалось деактивировать');
-                      }
-                    }}
+                    onClick={() => void archiveEmployee(employee.id)}
                   >
                     Деактивировать
                   </button>
@@ -303,12 +341,7 @@ export const EmployeesScreen = () => {
                 <div className="mt-3">
                   <button
                     className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold"
-                    onClick={() => {
-                      const result = updateEmployee(employee.id, { isActive: true });
-                      if (!result.ok) {
-                        setError(result.reason ?? 'Не удалось вернуть сотрудника');
-                      }
-                    }}
+                    onClick={() => void restoreEmployee(employee.id)}
                   >
                     Вернуть
                   </button>
@@ -405,7 +438,9 @@ export const EmployeesScreen = () => {
               </label>
             </div>
             <div className="mt-4 flex gap-3">
-              <PrimaryButton onClick={submitEdit}>Сохранить</PrimaryButton>
+              <PrimaryButton disabled={submitting} onClick={() => void submitEdit()}>
+                Сохранить
+              </PrimaryButton>
               <button
                 className="rounded-2xl border border-ink/10 px-4 py-3 text-sm font-semibold"
                 onClick={() => setEditingEmployee(null)}
@@ -438,7 +473,9 @@ export const EmployeesScreen = () => {
               />
             </div>
             <div className="mt-4 flex gap-3">
-              <PrimaryButton onClick={submitResetPin}>Сохранить PIN</PrimaryButton>
+              <PrimaryButton disabled={submitting} onClick={() => void submitResetPin()}>
+                Сохранить PIN
+              </PrimaryButton>
               <button
                 className="rounded-2xl border border-ink/10 px-4 py-3 text-sm font-semibold"
                 onClick={() => {

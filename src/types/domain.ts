@@ -66,22 +66,25 @@ export type Employee = {
   fullName: string;
   role: EmployeeRole;
   positionTitle: string;
-  pinHash: string;
-  pinSalt: string;
+  hasPin: boolean;
   isActive: boolean;
   createdAt: string;
+  updatedAt: string;
   department: TeamDepartment;
   hourlyRate: number | null;
   tenureLabel?: string;
 };
 
+export type EmployeeLoginOption = {
+  id: string;
+  fullName: string;
+  positionTitle: string;
+};
+
 export type SessionState = {
-  isAuthenticated: boolean;
-  employeeId: string | null;
-  lastAuthAt: string | null;
-  rememberMe: boolean;
-  failedAttempts: number;
-  lockUntil: string | null;
+  bootstrapped: boolean | null;
+  token: string | null;
+  me: Employee | null;
 };
 
 export type TimeEntry = {
@@ -103,6 +106,7 @@ export type AppState = {
   handoffItems: HandoffItem[];
   requests: Request[];
   employees: Employee[];
+  loginEmployees: EmployeeLoginOption[];
   session: SessionState;
   timeEntries: TimeEntry[];
 };

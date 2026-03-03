@@ -15,6 +15,7 @@ import {
   getDepartmentLabel,
   getEntriesForPeriod,
   getEntriesHours,
+  getNormalShiftLabel,
   getProfileRate,
   getRoleLabel,
   getTeamStats,
@@ -61,9 +62,17 @@ const StatValue = ({
 const OwnerStats = () => {
   const state = useAppStore();
   const currentEmployee = useAppStore(getCurrentEmployee);
+  const loadEmployees = useAppStore((store) => store.loadEmployees);
+  const employeesLoading = useAppStore((store) => store.employeesLoading);
   const [period, setPeriod] = useState<TimesheetPeriod>('week');
   const [department, setDepartment] = useState<TeamDepartment | 'all'>('all');
   const [userId, setUserId] = useState<string | 'all'>('all');
+
+  useEffect(() => {
+    if (currentEmployee?.role === 'owner') {
+      void loadEmployees();
+    }
+  }, [currentEmployee?.role, loadEmployees]);
 
   if (currentEmployee?.role !== 'owner') {
     return null;
@@ -149,6 +158,7 @@ const OwnerStats = () => {
             ))}
         </Select>
       </div>
+      {employeesLoading ? <p className="mt-4 text-sm text-ink/55">Синхронизируем команду…</p> : null}
       <div className="mt-4 space-y-3">
         {filtered.rows.map((row) => (
           <div key={row.employee.id} className="rounded-2xl bg-fog p-3">
@@ -197,6 +207,7 @@ export const ProfileScreen = () => {
     startTimeEntry,
     endCurrentTimeEntry,
     logout,
+    loadEmployees,
   } = useAppStore();
   const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
@@ -220,6 +231,12 @@ export const ProfileScreen = () => {
 
     return () => window.clearTimeout(timer);
   }, [earningsVisible]);
+
+  useEffect(() => {
+    if (currentEmployee?.role === 'owner') {
+      void loadEmployees();
+    }
+  }, [currentEmployee?.role, loadEmployees]);
 
   if (!currentEmployee) {
     return null;
@@ -250,13 +267,17 @@ export const ProfileScreen = () => {
     ? formatDuration(durationHours(activeEntry.startAt, null))
     : null;
 
-  const saveRate = () => {
+  const saveRate = async () => {
     if (isFixedRate) {
       return;
     }
 
     const parsed = Number(rateInput);
-    setHourlyRate(rateInput.trim() ? parsed || 0 : null);
+    const result = await setHourlyRate(rateInput.trim() ? parsed || 0 : null);
+
+    if (!result.ok) {
+      setEntryError(result.reason ?? 'Не удалось сохранить ставку');
+    }
   };
 
   const onStartShift = () => {
@@ -343,7 +364,7 @@ export const ProfileScreen = () => {
                 />
                 <button
                   className="rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white"
-                  onClick={saveRate}
+                  onClick={() => void saveRate()}
                 >
                   Сохранить
                 </button>
@@ -396,7 +417,7 @@ export const ProfileScreen = () => {
         <div className="mt-4 space-y-3">
           <div className="rounded-2xl bg-white/80 p-4">
             <p className="text-xs text-ink/45">Нормальная смена</p>
-            <p className="mt-2 text-lg font-semibold">11:20 - 23:20</p>
+            <p className="mt-2 text-lg font-semibold">{getNormalShiftLabel()}</p>
           </div>
           {activeEntry ? (
             <PrimaryButton onClick={() => onEndShift()}>Закончить смену</PrimaryButton>

@@ -1,86 +1,39 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  getOwnerWithoutPin,
-  useAppStore,
-} from '../store/useAppStore';
+import { useEffect, useState } from 'react';
+import { useAppStore } from '../store/useAppStore';
 import { Card, Input, PrimaryButton, Screen, SectionTitle, Select } from '../components/ui';
-
-const formatRemaining = (lockUntil: string | null) => {
-  if (!lockUntil) {
-    return null;
-  }
-
-  const remainingMs = new Date(lockUntil).getTime() - Date.now();
-
-  if (remainingMs <= 0) {
-    return null;
-  }
-
-  const totalSeconds = Math.ceil(remainingMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-};
 
 const sanitizePin = (value: string) => value.replace(/\D/g, '').slice(0, 6);
 
 export const PinAuthScreen = () => {
   const {
     session,
-    employees,
-    ensureBootstrapOwner,
-    ensureSessionValidity,
-    unlockIfExpired,
+    loginEmployees,
+    loginEmployeesLoading,
+    refreshLoginEmployees,
+    bootstrapOwner,
     loginWithPin,
-    setupOwnerPin,
   } = useAppStore();
-  const ownerWithoutPin = useAppStore(getOwnerWithoutPin);
-  const activeEmployees = useMemo(
-    () => employees.filter((employee) => employee.isActive),
-    [employees],
-  );
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [founderName, setFounderName] = useState('Юра');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
-  const [countdown, setCountdown] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    ensureBootstrapOwner();
-    ensureSessionValidity();
-    unlockIfExpired();
-  }, [ensureBootstrapOwner, ensureSessionValidity, unlockIfExpired]);
-
-  useEffect(() => {
-    if (!selectedEmployeeId && activeEmployees.length > 0) {
-      setSelectedEmployeeId(activeEmployees[0].id);
+    if (session.bootstrapped && loginEmployees.length === 0 && !loginEmployeesLoading) {
+      void refreshLoginEmployees();
     }
-  }, [activeEmployees, selectedEmployeeId]);
+  }, [loginEmployees.length, loginEmployeesLoading, refreshLoginEmployees, session.bootstrapped]);
 
   useEffect(() => {
-    setCountdown(formatRemaining(session.lockUntil));
-
-    if (!session.lockUntil) {
-      return undefined;
+    if (!selectedEmployeeId && loginEmployees.length > 0) {
+      setSelectedEmployeeId(loginEmployees[0].id);
     }
+  }, [loginEmployees, selectedEmployeeId]);
 
-    const timer = window.setInterval(() => {
-      unlockIfExpired();
-      setCountdown(formatRemaining(useAppStore.getState().session.lockUntil));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [session.lockUntil, unlockIfExpired]);
-
-  const selectedEmployee = useMemo(
-    () => employees.find((employee) => employee.id === selectedEmployeeId) ?? null,
-    [employees, selectedEmployeeId],
-  );
-
-  const isLocked = Boolean(countdown);
-  const isSetupMode = Boolean(ownerWithoutPin);
+  const isBootstrapMode = session.bootstrapped === false;
 
   const submitOwnerPin = async () => {
     setError(null);
@@ -90,7 +43,9 @@ export const PinAuthScreen = () => {
       return;
     }
 
-    const result = await setupOwnerPin(pin);
+    setSubmitting(true);
+    const result = await bootstrapOwner(founderName, pin);
+    setSubmitting(false);
 
     if (!result.ok) {
       setError(result.reason ?? 'Не удалось сохранить PIN');
@@ -105,7 +60,9 @@ export const PinAuthScreen = () => {
       return;
     }
 
-    const result = await loginWithPin(selectedEmployeeId, pin, true);
+    setSubmitting(true);
+    const result = await loginWithPin(selectedEmployeeId, pin);
+    setSubmitting(false);
 
     if (!result.ok) {
       setError(result.reason ?? 'Не удалось войти');
@@ -123,13 +80,19 @@ export const PinAuthScreen = () => {
         </div>
 
         <Card className="space-y-4">
-          {isSetupMode ? (
+          {isBootstrapMode ? (
             <>
-              <SectionTitle title="Создайте Owner PIN" />
+              <SectionTitle title="Создать PIN основателя" />
               <p className="text-sm text-ink/60">
-                Первый запуск. Для аккаунта {ownerWithoutPin?.fullName} нужно задать служебный PIN.
+                Общий backend еще не инициализирован. Создайте первый owner-доступ один раз для
+                всех устройств.
               </p>
               <div className="space-y-3">
+                <Input
+                  placeholder="Имя основателя"
+                  value={founderName}
+                  onChange={(event) => setFounderName(event.target.value)}
+                />
                 <Input
                   type={showPin ? 'text' : 'password'}
                   inputMode="numeric"
@@ -152,7 +115,9 @@ export const PinAuthScreen = () => {
                 </button>
               </div>
               {error ? <p className="text-sm text-red-700">{error}</p> : null}
-              <PrimaryButton onClick={submitOwnerPin}>Сохранить Owner PIN</PrimaryButton>
+              <PrimaryButton disabled={submitting} onClick={submitOwnerPin}>
+                Сохранить Owner PIN
+              </PrimaryButton>
             </>
           ) : (
             <>
@@ -162,9 +127,13 @@ export const PinAuthScreen = () => {
                   <p className="mb-2 text-sm font-semibold text-ink">Кто вы?</p>
                   <Select
                     value={selectedEmployeeId}
+                    disabled={loginEmployeesLoading || loginEmployees.length === 0}
                     onChange={(event) => setSelectedEmployeeId(event.target.value)}
                   >
-                    {activeEmployees.map((employee) => (
+                    {loginEmployees.length === 0 ? (
+                      <option value="">Нет активных сотрудников</option>
+                    ) : null}
+                    {loginEmployees.map((employee) => (
                       <option key={employee.id} value={employee.id}>
                         {employee.fullName} · {employee.positionTitle}
                       </option>
@@ -179,7 +148,7 @@ export const PinAuthScreen = () => {
                     placeholder="4–6 цифр"
                     value={pin}
                     onChange={(event) => setPin(sanitizePin(event.target.value))}
-                    disabled={isLocked}
+                    disabled={loginEmployeesLoading || loginEmployees.length === 0}
                   />
                 </div>
                 <button
@@ -189,16 +158,20 @@ export const PinAuthScreen = () => {
                   {showPin ? '🙈 Скрыть' : '👁 Показать'}
                 </button>
               </div>
-              {selectedEmployee && !selectedEmployee.pinHash ? (
+              {loginEmployeesLoading ? (
+                <p className="text-sm text-ink/55">Загружаем список сотрудников…</p>
+              ) : null}
+              {!loginEmployeesLoading && loginEmployees.length === 0 ? (
                 <p className="text-sm text-amber-800">
-                  Для этого сотрудника PIN еще не назначен. Обратитесь к Owner.
+                  Активных сотрудников пока нет. Войдите owner-пользователем на другом устройстве
+                  и добавьте команду.
                 </p>
               ) : null}
-              {isLocked ? (
-                <p className="text-sm text-red-700">Попробуйте позже: {countdown}</p>
-              ) : null}
               {error ? <p className="text-sm text-red-700">{error}</p> : null}
-              <PrimaryButton disabled={isLocked} onClick={submitLogin}>
+              <PrimaryButton
+                disabled={submitting || loginEmployeesLoading || loginEmployees.length === 0}
+                onClick={submitLogin}
+              >
                 Войти
               </PrimaryButton>
             </>

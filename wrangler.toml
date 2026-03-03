@@ -1,4 +1,7 @@
-name = "restaurant-os-miniapp"
-pages_build_output_dir = "dist"
-compatibility_date = "2026-03-01"
+name = "restaurant-os-api"
+main = "worker/index.ts"
+compatibility_date = "2024-03-01"
 
+[[kv_namespaces]]
+binding = "STAFF_KV"
+id = "cfee6db9b68a4b1181a199f42056f6fa"

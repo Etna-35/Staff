@@ -1,12 +1,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { apiClient, ApiError } from '../api/client';
 import { mockState } from '../data/mock';
-import {
-  createPinCredentials,
-  generatePinSalt,
-  hashPin,
-  isValidPinFormat,
-} from '../lib/pinAuth';
+import { isValidPinFormat } from '../lib/pinAuth';
 import {
   MIN_SHIFT_MINUTES,
   SHIFT_END_HOUR,
@@ -49,6 +45,7 @@ type EmployeeDraft = {
   positionTitle?: string;
   pin: string;
   hourlyRate?: number | null;
+  tenureLabel?: string;
 };
 
 type EmployeeUpdate = {
@@ -57,6 +54,7 @@ type EmployeeUpdate = {
   positionTitle?: string;
   isActive?: boolean;
   hourlyRate?: number | null;
+  tenureLabel?: string | null;
 };
 
 type ActionResult = {
@@ -66,22 +64,21 @@ type ActionResult = {
 };
 
 type Store = AppState & {
+  employeesLoading: boolean;
+  loginEmployeesLoading: boolean;
   setTelegramName: (name: string) => void;
-  ensureBootstrapOwner: () => void;
-  ensureSessionValidity: () => void;
-  unlockIfExpired: () => void;
-  setupOwnerPin: (pin: string) => Promise<ActionResult>;
-  loginWithPin: (
-    employeeId: string,
-    pin: string,
-    rememberMe?: boolean,
-  ) => Promise<ActionResult>;
+  loadBootstrapStatus: () => Promise<void>;
+  loadMe: () => Promise<void>;
+  refreshLoginEmployees: () => Promise<void>;
+  bootstrapOwner: (fullName: string, pin: string) => Promise<ActionResult>;
+  loginWithPin: (employeeId: string, pin: string) => Promise<ActionResult>;
   logout: () => void;
-  setHourlyRate: (rate: number | null) => void;
+  loadEmployees: () => Promise<void>;
+  setHourlyRate: (rate: number | null) => Promise<ActionResult>;
   createEmployee: (input: EmployeeDraft) => Promise<ActionResult>;
-  updateEmployee: (employeeId: string, updates: EmployeeUpdate) => ActionResult;
+  updateEmployee: (employeeId: string, updates: EmployeeUpdate) => Promise<ActionResult>;
   resetEmployeePin: (employeeId: string, pin: string) => Promise<ActionResult>;
-  deactivateEmployee: (employeeId: string) => ActionResult;
+  deactivateEmployee: (employeeId: string) => Promise<ActionResult>;
   createTask: (title: string, assignee: string, points: number) => void;
   markTaskDone: (taskId: string) => void;
   acceptTask: (taskId: string) => void;
@@ -97,11 +94,55 @@ type Store = AppState & {
   resetDemo: () => void;
 };
 
+type PersistedStoreSlice = Pick<
+  Store,
+  | 'telegramName'
+  | 'shift'
+  | 'tasks'
+  | 'losses'
+  | 'handoffItems'
+  | 'requests'
+  | 'timeEntries'
+  | 'session'
+>;
+
 const storageKey = 'restaurant-os-mvp';
-const lockDurationMs = 5 * 60 * 1000;
 
 const cloneInitialState = (): AppState =>
   JSON.parse(JSON.stringify(mockState)) as AppState;
+
+const createAnonymousSession = (
+  overrides: Partial<Store['session']> = {},
+): Store['session'] => ({
+  bootstrapped: null,
+  token: null,
+  me: null,
+  ...overrides,
+});
+
+const normalizeState = (state: AppState): AppState => ({
+  ...state,
+  telegramName: state.telegramName || 'Гость смены',
+  employees: state.employees ?? [],
+  loginEmployees: state.loginEmployees ?? [],
+  session: createAnonymousSession({
+    bootstrapped: state.session?.bootstrapped ?? null,
+    token: state.session?.token ?? null,
+    me: state.session?.me ?? null,
+  }),
+});
+
+const sortTasks = (tasks: Task[]) =>
+  [...tasks].sort((a, b) => {
+    const statusOrder = {
+      done: 0,
+      assigned: 1,
+      returned: 2,
+      accepted: 3,
+    } as const;
+
+    return statusOrder[a.status] - statusOrder[b.status];
+  });
 
 const getDefaultDepartment = (role: EmployeeRole): TeamDepartment => {
   if (role === 'waiter') {
@@ -119,148 +160,175 @@ const getDefaultDepartment = (role: EmployeeRole): TeamDepartment => {
   return 'other';
 };
 
-const makeOwnerSeed = (): Employee => ({
-  id: 'emp-owner-yura',
-  fullName: 'Юра',
-  role: 'owner',
-  positionTitle: 'Owner / Admin',
-  pinHash: '',
-  pinSalt: generatePinSalt(),
-  isActive: true,
-  createdAt: new Date().toISOString(),
-  department: 'other',
-  hourlyRate: null,
-  tenureLabel: 'основатель',
-});
+type EmployeeShapeInput = Partial<Employee> &
+  Pick<Employee, 'id' | 'fullName' | 'role' | 'positionTitle' | 'isActive'>;
 
-const normalizeEmployees = (employees: Employee[]) => {
-  if (employees.length === 0) {
-    return [makeOwnerSeed()];
-  }
-
-  const normalized = employees.map((employee) => ({
-    ...employee,
-    pinSalt: employee.pinSalt || generatePinSalt(),
-  }));
-
-  if (!normalized.some((employee) => employee.role === 'owner')) {
-    normalized.unshift(makeOwnerSeed());
-  }
-
-  return normalized;
-};
-
-const normalizeState = (state: AppState): AppState => {
-  const employees = normalizeEmployees(state.employees ?? []);
-  const activeEmployee = employees.find(
-    (employee) =>
-      employee.id === state.session?.employeeId &&
-      employee.isActive &&
-      Boolean(employee.pinHash),
-  );
+const applyEmployeeShape = (
+  employee: EmployeeShapeInput,
+  fallback?: Partial<Employee>,
+): Employee => {
+  const createdAt = employee.createdAt ?? fallback?.createdAt ?? new Date().toISOString();
+  const role = employee.role ?? fallback?.role ?? 'waiter';
 
   return {
-    ...state,
-    telegramName: state.telegramName || 'Гость смены',
-    employees,
-    session: {
-      isAuthenticated: Boolean(activeEmployee && state.session?.isAuthenticated),
-      employeeId: activeEmployee?.id ?? null,
-      lastAuthAt: activeEmployee ? state.session?.lastAuthAt ?? null : null,
-      rememberMe: state.session?.rememberMe ?? true,
-      failedAttempts: state.session?.failedAttempts ?? 0,
-      lockUntil: state.session?.lockUntil ?? null,
-    },
+    id: employee.id,
+    fullName: employee.fullName ?? fallback?.fullName ?? 'Сотрудник',
+    role,
+    positionTitle:
+      employee.positionTitle ??
+      fallback?.positionTitle ??
+      getDefaultPositionTitle(role),
+    hasPin: employee.hasPin ?? fallback?.hasPin ?? true,
+    isActive: employee.isActive ?? fallback?.isActive ?? true,
+    createdAt,
+    updatedAt: employee.updatedAt ?? fallback?.updatedAt ?? createdAt,
+    department: employee.department ?? fallback?.department ?? getDefaultDepartment(role),
+    hourlyRate: employee.hourlyRate ?? fallback?.hourlyRate ?? null,
+    tenureLabel: employee.tenureLabel ?? fallback?.tenureLabel,
   };
 };
 
-const sortTasks = (tasks: Task[]) =>
-  [...tasks].sort((a, b) => {
-    const statusOrder = {
-      done: 0,
-      assigned: 1,
-      returned: 2,
-      accepted: 3,
-    } as const;
+const replaceEmployeeInList = (employees: Employee[], nextEmployee: Employee) => {
+  const normalizedEmployee = applyEmployeeShape(nextEmployee);
+  const nextList = employees.some((employee) => employee.id === normalizedEmployee.id)
+    ? employees.map((employee) =>
+        employee.id === normalizedEmployee.id ? normalizedEmployee : employee,
+      )
+    : [normalizedEmployee, ...employees];
 
-    return statusOrder[a.status] - statusOrder[b.status];
-  });
+  return nextList.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+};
+
+const getSessionToken = (state: Store) => state.session.token;
+const getSessionMe = (state: Store) => state.session.me;
 
 export const useAppStore = create<Store>()(
   persist(
     (set, get) => ({
       ...normalizeState(cloneInitialState()),
+      employeesLoading: false,
+      loginEmployeesLoading: false,
       setTelegramName: (name) => set({ telegramName: name }),
-      ensureBootstrapOwner: () =>
-        set((state) => {
-          if (state.employees.length > 0) {
-            return state;
-          }
+      loadBootstrapStatus: async () => {
+        try {
+          const { bootstrapped } = await apiClient.getBootstrapStatus();
 
-          return {
-            ...state,
-            employees: [makeOwnerSeed()],
-          };
-        }),
-      ensureSessionValidity: () =>
-        set((state) => {
-          const currentEmployee = state.employees.find(
-            (employee) => employee.id === state.session.employeeId,
-          );
-
-          const alreadyCleared =
-            !state.session.isAuthenticated &&
-            state.session.employeeId === null &&
-            state.session.lastAuthAt === null;
-
-          if (
-            !state.session.isAuthenticated ||
-            !currentEmployee ||
-            !currentEmployee.isActive ||
-            !currentEmployee.pinHash
-          ) {
-            if (alreadyCleared) {
-              return state;
-            }
-
-            return {
-              session: {
-                ...state.session,
-                isAuthenticated: false,
-                employeeId: null,
-                lastAuthAt: null,
-              },
-            };
-          }
-
-          return state;
-        }),
-      unlockIfExpired: () =>
-        set((state) => {
-          if (!state.session.lockUntil) {
-            return state;
-          }
-
-          if (new Date(state.session.lockUntil).getTime() > Date.now()) {
-            return state;
-          }
-
-          return {
+          set((state) => ({
             session: {
               ...state.session,
-              failedAttempts: 0,
-              lockUntil: null,
+              bootstrapped,
+              ...(bootstrapped ? {} : { token: null, me: null }),
             },
-          };
-        }),
-      setupOwnerPin: async (pin) => {
-        const state = get();
-        const owner = state.employees.find((employee) => employee.role === 'owner');
+          }));
 
-        if (!owner) {
+          if (bootstrapped) {
+            await get().refreshLoginEmployees().catch(() => undefined);
+          }
+        } catch {
+          set((state) => ({
+            session: {
+              ...state.session,
+              bootstrapped: true,
+            },
+          }));
+        }
+      },
+      loadMe: async () => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          set((state) => ({
+            session: {
+              ...state.session,
+              me: null,
+            },
+          }));
+          return;
+        }
+
+        try {
+          const currentMe = getSessionMe(get());
+          const me = applyEmployeeShape(await apiClient.getMe(token, () => get().logout()), currentMe ?? undefined);
+
+          set((state) => ({
+            employees:
+              me.role === 'owner'
+                ? replaceEmployeeInList(state.employees, me)
+                : replaceEmployeeInList(
+                    state.employees.filter((employee) => employee.id !== me.id),
+                    me,
+                  ),
+            session: {
+              ...state.session,
+              me,
+            },
+          }));
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            return;
+          }
+        }
+      },
+      refreshLoginEmployees: async () => {
+        if (get().session.bootstrapped === false) {
+          return;
+        }
+
+        set({ loginEmployeesLoading: true });
+
+        try {
+          const loginEmployees = await apiClient.getLoginEmployees();
+
+          set({
+            loginEmployees,
+            loginEmployeesLoading: false,
+          });
+        } catch {
+          set({
+            loginEmployees: [],
+            loginEmployeesLoading: false,
+          });
+        }
+      },
+      bootstrapOwner: async (fullName, pin) => {
+        if (!isValidPinFormat(pin)) {
           return {
             ok: false,
-            reason: 'Owner аккаунт не найден',
+            reason: 'PIN должен быть 4–6 цифр',
+          };
+        }
+
+        try {
+          const { sessionToken } = await apiClient.bootstrapOwner({
+            fullName: fullName.trim() || 'Юра',
+            pin,
+          });
+          set((state) => ({
+            session: {
+              ...state.session,
+              bootstrapped: true,
+              token: sessionToken,
+            },
+          }));
+          await get().loadMe();
+          await get().refreshLoginEmployees().catch(() => undefined);
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось создать PIN основателя',
+          };
+        }
+      },
+      loginWithPin: async (employeeId, pin) => {
+        if (!employeeId) {
+          return {
+            ok: false,
+            reason: 'Выберите сотрудника',
           };
         }
 
@@ -271,118 +339,118 @@ export const useAppStore = create<Store>()(
           };
         }
 
-        const { hash, salt } = await createPinCredentials(pin);
+        try {
+          const { sessionToken } = await apiClient.login({
+            employeeId,
+            pin,
+          });
+          set((state) => ({
+            session: {
+              ...state.session,
+              bootstrapped: true,
+              token: sessionToken,
+            },
+          }));
+          await get().loadMe();
+
+          if (get().session.me?.role === 'owner') {
+            await get().loadEmployees();
+          }
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason: error instanceof ApiError ? error.message : 'Не удалось войти',
+          };
+        }
+      },
+      logout: () => {
+        set((state) => ({
+          session: {
+            ...state.session,
+            token: null,
+            me: null,
+          },
+        }));
+      },
+      loadEmployees: async () => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          set({
+            employees: [],
+          });
+          return;
+        }
+
+        set({ employeesLoading: true });
+
+        try {
+          const currentMe = getSessionMe(get());
+          const employees = await apiClient.getEmployees(token, () => get().logout());
+
+          set((state) => ({
+            employees: employees.map((employee) =>
+              applyEmployeeShape(
+                employee,
+                state.employees.find((item) => item.id === employee.id),
+              ),
+            ),
+            employeesLoading: false,
+            session: currentMe
+              ? {
+                  ...state.session,
+                  me: applyEmployeeShape(
+                    employees.find((employee) => employee.id === currentMe.id) ?? currentMe,
+                    currentMe,
+                  ),
+                }
+              : state.session,
+          }));
+        } catch {
+          set({ employeesLoading: false });
+        }
+      },
+      setHourlyRate: async (rate) => {
+        const state = get();
+        const currentMe = getSessionMe(state);
+
+        if (!currentMe) {
+          return {
+            ok: false,
+            reason: 'Сначала войдите по PIN',
+          };
+        }
+
+        const employee = applyEmployeeShape(
+          {
+            ...currentMe,
+            hourlyRate: rate,
+          },
+          currentMe,
+        );
 
         set((current) => ({
-          employees: current.employees.map((employee) =>
-            employee.id === owner.id
-              ? {
-                  ...employee,
-                  pinHash: hash,
-                  pinSalt: salt,
-                }
-              : employee,
-          ),
+          employees: replaceEmployeeInList(current.employees, employee),
           session: {
-            isAuthenticated: true,
-            employeeId: owner.id,
-            lastAuthAt: new Date().toISOString(),
-            rememberMe: true,
-            failedAttempts: 0,
-            lockUntil: null,
+            ...current.session,
+            me: employee,
           },
         }));
 
         return { ok: true };
       },
-      loginWithPin: async (employeeId, pin, rememberMe = true) => {
-        get().unlockIfExpired();
-        const state = get();
-
-        if (state.session.lockUntil && new Date(state.session.lockUntil).getTime() > Date.now()) {
-          return {
-            ok: false,
-            reason: 'Попробуйте позже',
-          };
-        }
-
-        const employee = state.employees.find(
-          (item) => item.id === employeeId && item.isActive,
-        );
-
-        if (!employee) {
-          return {
-            ok: false,
-            reason: 'Сотрудник не найден',
-          };
-        }
-
-        if (!employee.pinHash) {
-          return {
-            ok: false,
-            reason: 'PIN еще не назначен',
-          };
-        }
-
-        const hashed = await hashPin(pin, employee.pinSalt);
-
-        if (hashed !== employee.pinHash) {
-          const failedAttempts = state.session.failedAttempts + 1;
-          const shouldLock = failedAttempts >= 5;
-
-          set({
-            session: {
-              ...state.session,
-              isAuthenticated: false,
-              employeeId: null,
-              lastAuthAt: null,
-              failedAttempts: shouldLock ? 5 : failedAttempts,
-              lockUntil: shouldLock
-                ? new Date(Date.now() + lockDurationMs).toISOString()
-                : null,
-            },
-          });
-
-          return {
-            ok: false,
-            reason: shouldLock ? 'Попробуйте позже' : 'Неверный PIN',
-          };
-        }
-
-        set({
-          session: {
-            isAuthenticated: true,
-            employeeId: employee.id,
-            lastAuthAt: new Date().toISOString(),
-            rememberMe,
-            failedAttempts: 0,
-            lockUntil: null,
-          },
-        });
-
-        return { ok: true };
-      },
-      logout: () =>
-        set((state) => ({
-          session: {
-            ...state.session,
-            isAuthenticated: false,
-            employeeId: null,
-            lastAuthAt: null,
-          },
-        })),
-      setHourlyRate: (rate) =>
-        set((state) => ({
-          employees: state.employees.map((employee) =>
-            employee.id === state.session.employeeId
-              ? {
-                  ...employee,
-                  hourlyRate: rate,
-                }
-              : employee,
-          ),
-        })),
       createEmployee: async (input) => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
         if (!input.fullName.trim()) {
           return {
             ok: false,
@@ -397,91 +465,115 @@ export const useAppStore = create<Store>()(
           };
         }
 
-        const { hash, salt } = await createPinCredentials(input.pin);
+        try {
+          const draftEmployee = applyEmployeeShape({
+            id: crypto.randomUUID(),
+            fullName: input.fullName.trim(),
+            role: input.role,
+            positionTitle:
+              input.positionTitle?.trim() || getDefaultPositionTitle(input.role),
+            isActive: true,
+            hourlyRate:
+              input.role === 'chef' ? input.hourlyRate ?? null : getPresetRate(input.role),
+            tenureLabel: input.tenureLabel?.trim() || undefined,
+          });
+          const employee = applyEmployeeShape(
+            await apiClient.createEmployee(
+              token,
+              {
+                fullName: input.fullName.trim(),
+                role: input.role,
+                positionTitle:
+                  input.positionTitle?.trim() || getDefaultPositionTitle(input.role),
+                pin: input.pin,
+                hourlyRate:
+                  input.role === 'chef' ? input.hourlyRate ?? null : getPresetRate(input.role),
+                tenureLabel: input.tenureLabel?.trim() || undefined,
+              },
+              () => get().logout(),
+            ),
+            draftEmployee,
+          );
 
-        set((state) => ({
-          employees: [
-            {
-              id: crypto.randomUUID(),
-              fullName: input.fullName.trim(),
-              role: input.role,
-              positionTitle:
-                input.positionTitle?.trim() || getDefaultPositionTitle(input.role),
-              pinHash: hash,
-              pinSalt: salt,
-              isActive: true,
-              createdAt: new Date().toISOString(),
-              department: getDefaultDepartment(input.role),
-              hourlyRate:
-                input.role === 'chef' ? input.hourlyRate ?? null : getPresetRate(input.role),
-            },
-            ...state.employees,
-          ],
-        }));
+          set((state) => ({
+            employees: replaceEmployeeInList(state.employees, employee),
+            loginEmployees: [
+              {
+                id: employee.id,
+                fullName: employee.fullName,
+                positionTitle: employee.positionTitle,
+              },
+              ...state.loginEmployees.filter((item) => item.id !== employee.id),
+            ],
+          }));
 
-        return { ok: true };
+          await get().refreshLoginEmployees().catch(() => undefined);
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось создать сотрудника',
+          };
+        }
       },
-      updateEmployee: (employeeId, updates) => {
-        const state = get();
-        const employee = state.employees.find((item) => item.id === employeeId);
+      updateEmployee: async (employeeId, updates) => {
+        const token = getSessionToken(get());
 
-        if (!employee) {
+        if (!token) {
           return {
             ok: false,
-            reason: 'Сотрудник не найден',
+            reason: 'Нужен owner-доступ',
           };
         }
 
-        const nextRole = updates.role ?? employee.role;
-        const nextIsActive = updates.isActive ?? employee.isActive;
-        const activeOwners = state.employees.filter(
-          (item) => item.role === 'owner' && item.isActive,
-        );
+        try {
+          const currentEmployee = get().employees.find((employee) => employee.id === employeeId);
+          const employee = applyEmployeeShape(
+            await apiClient.updateEmployee(
+              token,
+              employeeId,
+              {
+                ...updates,
+                fullName: updates.fullName?.trim(),
+                positionTitle: updates.positionTitle?.trim(),
+              },
+              () => get().logout(),
+            ),
+            currentEmployee,
+          );
 
-        if (
-          employee.role === 'owner' &&
-          (!nextIsActive || nextRole !== 'owner') &&
-          activeOwners.length <= 1
-        ) {
+          set((state) => ({
+            employees: replaceEmployeeInList(state.employees, employee),
+            session:
+              state.session.me?.id === employee.id
+                ? {
+                    ...state.session,
+                    me: employee,
+                  }
+                : state.session,
+          }));
+
+          await get().refreshLoginEmployees().catch(() => undefined);
+          return { ok: true };
+        } catch (error) {
           return {
             ok: false,
-            reason: 'Нужен минимум один активный owner',
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось обновить сотрудника',
           };
         }
-
-        set((current) => ({
-          employees: current.employees.map((item) =>
-            item.id === employeeId
-              ? {
-                  ...item,
-                  ...updates,
-                  role: nextRole,
-                  department: getDefaultDepartment(nextRole),
-                  positionTitle:
-                    updates.positionTitle?.trim() ||
-                    item.positionTitle ||
-                    getDefaultPositionTitle(nextRole),
-                  hourlyRate:
-                    nextRole === 'chef' || nextRole === 'owner'
-                      ? updates.hourlyRate ?? item.hourlyRate
-                      : getPresetRate(nextRole),
-                }
-              : item,
-          ),
-          session:
-            !nextIsActive && current.session.employeeId === employeeId
-              ? {
-                  ...current.session,
-                  isAuthenticated: false,
-                  employeeId: null,
-                  lastAuthAt: null,
-                }
-              : current.session,
-        }));
-
-        return { ok: true };
       },
       resetEmployeePin: async (employeeId, pin) => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
         if (!isValidPinFormat(pin)) {
           return {
             ok: false,
@@ -489,24 +581,55 @@ export const useAppStore = create<Store>()(
           };
         }
 
-        const { hash, salt } = await createPinCredentials(pin);
+        try {
+          await apiClient.resetEmployeePin(token, employeeId, pin, () => get().logout());
 
-        set((state) => ({
-          employees: state.employees.map((employee) =>
-            employee.id === employeeId
-              ? {
-                  ...employee,
-                  pinHash: hash,
-                  pinSalt: salt,
-                }
-              : employee,
-          ),
-        }));
-
-        return { ok: true };
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason: error instanceof ApiError ? error.message : 'Не удалось сбросить PIN',
+          };
+        }
       },
-      deactivateEmployee: (employeeId) =>
-        get().updateEmployee(employeeId, { isActive: false }),
+      deactivateEmployee: async (employeeId) => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        try {
+          await apiClient.deactivateEmployee(token, employeeId, () => get().logout());
+
+          set((state) => ({
+            employees: state.employees.map((employee) =>
+              employee.id === employeeId
+                ? {
+                    ...employee,
+                    isActive: false,
+                  }
+                : employee,
+            ),
+          }));
+
+          if (get().session.me?.id === employeeId) {
+            get().logout();
+          }
+
+          await get().refreshLoginEmployees().catch(() => undefined);
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось деактивировать сотрудника',
+          };
+        }
+      },
       createTask: (title, assignee, points) =>
         set((state) => ({
           tasks: sortTasks([
@@ -697,19 +820,60 @@ export const useAppStore = create<Store>()(
 
         return { ok: true };
       },
-      resetDemo: () => set(normalizeState(cloneInitialState())),
+      resetDemo: () =>
+        set((state) => ({
+          ...normalizeState(cloneInitialState()),
+          employees: state.employees,
+          loginEmployees: state.loginEmployees,
+          session: state.session,
+          employeesLoading: false,
+          loginEmployeesLoading: false,
+        })),
     }),
     {
       name: storageKey,
-      version: 3,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...normalizeState({
-          ...(currentState as unknown as AppState),
-          ...(persistedState as Partial<AppState>),
-        } as AppState),
+      partialize: (state): PersistedStoreSlice => ({
+        telegramName: state.telegramName,
+        shift: state.shift,
+        tasks: state.tasks,
+        losses: state.losses,
+        handoffItems: state.handoffItems,
+        requests: state.requests,
+        timeEntries: state.timeEntries,
+        session: {
+          token: state.session.token,
+          bootstrapped: null,
+          me: null,
+        },
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<PersistedStoreSlice>;
+        const baseState = currentState as Store;
+        const normalized = normalizeState({
+          ...cloneInitialState(),
+          telegramName: persisted.telegramName ?? baseState.telegramName,
+          shift: persisted.shift ?? baseState.shift,
+          tasks: persisted.tasks ?? baseState.tasks,
+          losses: persisted.losses ?? baseState.losses,
+          handoffItems: persisted.handoffItems ?? baseState.handoffItems,
+          requests: persisted.requests ?? baseState.requests,
+          timeEntries: persisted.timeEntries ?? baseState.timeEntries,
+          employees: [],
+          loginEmployees: [],
+          session: createAnonymousSession({
+            token: persisted.session?.token ?? null,
+          }),
+        });
+
+        return {
+          ...baseState,
+          ...normalized,
+          employeesLoading: false,
+          loginEmployeesLoading: false,
+        };
+      },
     },
   ),
 );
@@ -749,8 +913,7 @@ export const getRoleLabel = (role: EmployeeRole) => {
   return labels[role];
 };
 
-export const getCurrentEmployee = (state: Store) =>
-  state.employees.find((employee) => employee.id === state.session.employeeId) ?? null;
+export const getCurrentEmployee = (state: Store) => state.session.me ?? null;
 
 export const getCurrentEmployeeRole = (state: Store) =>
   getCurrentEmployee(state)?.role ?? null;
@@ -773,11 +936,7 @@ export const getActiveEmployees = (state: Store) =>
 export const getArchivedEmployees = (state: Store) =>
   state.employees.filter((employee) => !employee.isActive);
 
-export const getEmployeesWithPins = (state: Store) =>
-  state.employees.filter((employee) => employee.isActive && Boolean(employee.pinHash));
-
-export const getOwnerWithoutPin = (state: Store) =>
-  state.employees.find((employee) => employee.role === 'owner' && !employee.pinHash) ?? null;
+export const getLoginEmployees = (state: Store) => state.loginEmployees;
 
 export const getProfileRate = (employee: Employee | null) =>
   employee ? resolveHourlyRate(employee) : null;
@@ -816,7 +975,17 @@ export const getTeamStats = (
   now = new Date(),
 ) => {
   const periodEntries = getPeriodEntries(state.timeEntries, filters.period, now);
-  const filteredEmployees = state.employees.filter((employee) => {
+  const employeeMap = new Map<string, Employee>();
+
+  state.employees.forEach((employee) => {
+    employeeMap.set(employee.id, employee);
+  });
+
+  if (state.session.me && !employeeMap.has(state.session.me.id)) {
+    employeeMap.set(state.session.me.id, state.session.me);
+  }
+
+  const filteredEmployees = Array.from(employeeMap.values()).filter((employee) => {
     if (!employee.isActive) {
       return false;
     }

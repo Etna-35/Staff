@@ -1,0 +1,10 @@
+name = "restaurant-os-api"
+main = "src/index.ts"
+compatibility_date = "2026-03-03"
+
+kv_namespaces = [
+  { binding = "STAFF_KV", id = "cfee6db9b68a4b1181a199f42056f6fa", preview_id = "cfee6db9b68a4b1181a199f42056f6fa" }
+]
+
+[vars]
+ALLOWED_ORIGIN = "https://etnastaff.pages.dev"
