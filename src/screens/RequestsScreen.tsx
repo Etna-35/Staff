@@ -257,12 +257,12 @@ export const RequestsScreen = () => {
       {category === 'kitchen' ? (
         <>
           <Card>
-            <SectionTitle title="Кухня · тест каталога" action={<Pill>Demo</Pill>} />
-            <div className="grid grid-cols-2 gap-3">
+            <SectionTitle title="Кухня · каталог" />
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {kitchenRequestCatalogDemo.map((mainCategory) => (
                 <button
                   key={mainCategory.id}
-                  className={`rounded-2xl px-4 py-4 text-left text-sm font-semibold ${
+                  className={`shrink-0 rounded-2xl px-4 py-4 text-left text-sm font-semibold ${
                     selectedMainCategoryId === mainCategory.id
                       ? 'bg-ink text-white'
                       : 'bg-fog text-ink'
@@ -274,9 +274,6 @@ export const RequestsScreen = () => {
                 </button>
               ))}
             </div>
-            {selectedMainCategory?.description ? (
-              <p className="mt-4 text-sm text-ink/60">{selectedMainCategory.description}</p>
-            ) : null}
             {selectedMainCategory?.subcategories.length ? (
               <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
                 {selectedMainCategory.subcategories.map((subcategory) => (
@@ -303,19 +300,11 @@ export const RequestsScreen = () => {
 
                   return (
                     <div key={product.id} className="rounded-2xl bg-fog p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">{selectedSubcategory.icon}</span>
-                            <p className="font-semibold">{product.name}</p>
-                          </div>
-                          <p className="mt-2 text-sm text-ink/55">
-                            В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
-                          </p>
-                        </div>
-                        <Pill tone={isOverLimit ? 'warning' : quantity > 0 ? 'success' : 'default'}>
-                          {formatQuantity(quantity, product.unit)}
-                        </Pill>
+                      <div className="min-w-0">
+                        <p className="font-semibold">{product.name}</p>
+                        <p className="mt-2 text-sm text-ink/55">
+                          В неделю: {formatQuantity(product.weeklyNorm, product.unit)}
+                        </p>
                       </div>
                       <div className="mt-4 flex items-center gap-3">
                         <button
