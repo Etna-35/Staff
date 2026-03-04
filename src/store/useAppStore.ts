@@ -70,6 +70,14 @@ type EmployeeDraft = {
   tenureLabel?: string;
 };
 
+type TaskDraft = {
+  title: string;
+  assigneeId: string | null;
+  assigneeName: string;
+  points: number;
+  rewardAmount?: number;
+};
+
 type EmployeeUpdate = {
   fullName?: string;
   role?: EmployeeRole;
@@ -139,7 +147,7 @@ type Store = AppState & {
   updateEmployee: (employeeId: string, updates: EmployeeUpdate) => Promise<ActionResult>;
   resetEmployeePin: (employeeId: string, pin: string) => Promise<ActionResult>;
   deactivateEmployee: (employeeId: string) => Promise<ActionResult>;
-  createTask: (title: string, assignee: string, points: number) => void;
+  createTask: (input: TaskDraft) => void;
   markTaskDone: (taskId: string) => void;
   acceptTask: (taskId: string) => void;
   returnTask: (taskId: string, reason: string) => void;
@@ -925,14 +933,16 @@ export const useAppStore = create<Store>()(
           };
         }
       },
-      createTask: (title, assignee, points) =>
+      createTask: ({ title, assigneeId, assigneeName, points, rewardAmount = 0 }) =>
         set((state) => ({
           tasks: sortTasks([
             {
               id: crypto.randomUUID(),
               title,
-              assignee,
+              assignee: assigneeName,
+              assigneeId: assigneeId ?? undefined,
               points,
+              rewardAmount: rewardAmount > 0 ? rewardAmount : 0,
               status: 'assigned',
               dueLabel: 'новая задача',
             },
@@ -1781,6 +1791,28 @@ export const getLoginEmployees = (state: Store) => state.loginEmployees;
 
 export const getProfileRate = (employee: Employee | null) =>
   employee ? resolveHourlyRate(employee) : null;
+
+const normalizeTaskAssignee = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
+
+export const isTaskAssignedToEmployee = (task: Task, employee: Employee | null) => {
+  if (!employee) {
+    return false;
+  }
+
+  if (task.assigneeId) {
+    return task.assigneeId === employee.id;
+  }
+
+  return normalizeTaskAssignee(task.assignee) === normalizeTaskAssignee(employee.fullName);
+};
+
+export const getTasksForEmployee = (tasks: Task[], employee: Employee | null) =>
+  tasks.filter((task) => isTaskAssignedToEmployee(task, employee));
+
+export const getAcceptedTaskRewardTotal = (tasks: Task[], employee: Employee | null) =>
+  tasks
+    .filter((task) => task.status === 'accepted' && isTaskAssignedToEmployee(task, employee))
+    .reduce((sum, task) => sum + (task.rewardAmount ?? 0), 0);
 
 export const getEntriesHours = (entries: TimeEntry[], now = new Date()) =>
   entries.reduce((sum, entry) => sum + durationHours(entry.startAt, entry.endAt, now), 0);

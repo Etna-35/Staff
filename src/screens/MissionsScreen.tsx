@@ -1,6 +1,14 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { getCurrentEmployee, useAppStore } from '../store/useAppStore';
-import { Card, Input, Pill, PrimaryButton, SectionTitle, SecondaryButton } from '../components/ui';
+import {
+  Card,
+  Input,
+  Pill,
+  PrimaryButton,
+  SectionTitle,
+  SecondaryButton,
+  Select,
+} from '../components/ui';
 
 const statusText = {
   assigned: 'Назначено',
@@ -45,15 +53,34 @@ const checklistMeta = {
 export const MissionsScreen = () => {
   const { tasks, createTask, markTaskDone, acceptTask, returnTask } = useAppStore();
   const currentEmployee = useAppStore(getCurrentEmployee);
+  const loginEmployees = useAppStore((state) => state.loginEmployees);
+  const refreshLoginEmployees = useAppStore((state) => state.refreshLoginEmployees);
   const [title, setTitle] = useState('');
-  const [assignee, setAssignee] = useState(currentEmployee?.fullName ?? '');
+  const [assigneeId, setAssigneeId] = useState('');
   const [points, setPoints] = useState('10');
+  const [rewardAmount, setRewardAmount] = useState('0');
   const [returnReasons, setReturnReasons] = useState<Record<string, string>>({});
 
   const pendingReview = useMemo(
     () => tasks.filter((task) => task.status === 'done'),
     [tasks],
   );
+  const assigneeOptions = useMemo(
+    () => [...loginEmployees].sort((left, right) => left.fullName.localeCompare(right.fullName, 'ru')),
+    [loginEmployees],
+  );
+
+  useEffect(() => {
+    if (currentEmployee?.role === 'owner' && assigneeOptions.length === 0) {
+      void refreshLoginEmployees();
+    }
+  }, [assigneeOptions.length, currentEmployee?.role, refreshLoginEmployees]);
+
+  useEffect(() => {
+    if (!assigneeId && assigneeOptions.length > 0) {
+      setAssigneeId(assigneeOptions[0].id);
+    }
+  }, [assigneeId, assigneeOptions]);
 
   if (currentEmployee?.role !== 'owner') {
     const checklistItems = currentEmployee ? checklistMeta[currentEmployee.role] : [];
@@ -83,14 +110,22 @@ export const MissionsScreen = () => {
   const submitTask = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!title.trim() || !assignee.trim()) {
+    const assignee = assigneeOptions.find((employee) => employee.id === assigneeId);
+
+    if (!title.trim() || !assignee) {
       return;
     }
 
-    createTask(title.trim(), assignee.trim(), Number(points) || 0);
+    createTask({
+      title: title.trim(),
+      assigneeId: assignee.id,
+      assigneeName: assignee.fullName,
+      points: Number(points) || 0,
+      rewardAmount: Number(rewardAmount) || 0,
+    });
     setTitle('');
-    setAssignee('');
     setPoints('10');
+    setRewardAmount('0');
   };
 
   return (
@@ -107,18 +142,29 @@ export const MissionsScreen = () => {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
           />
-          <Input
-            placeholder="Исполнитель"
-            value={assignee}
-            onChange={(event) => setAssignee(event.target.value)}
-          />
-          <Input
-            type="number"
-            min="0"
-            placeholder="Очки"
-            value={points}
-            onChange={(event) => setPoints(event.target.value)}
-          />
+          <Select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
+            {assigneeOptions.map((employee) => (
+              <option key={employee.id} value={employee.id}>
+                {employee.fullName}
+              </option>
+            ))}
+          </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              type="number"
+              min="0"
+              placeholder="Очки"
+              value={points}
+              onChange={(event) => setPoints(event.target.value)}
+            />
+            <Input
+              type="number"
+              min="0"
+              placeholder="Награда ₽"
+              value={rewardAmount}
+              onChange={(event) => setRewardAmount(event.target.value)}
+            />
+          </div>
           <PrimaryButton type="submit">Создать задачу</PrimaryButton>
         </form>
       </Card>
@@ -173,7 +219,10 @@ export const MissionsScreen = () => {
               <div>
                 <p className="font-semibold">{task.title}</p>
                 <p className="mt-1 text-sm text-ink/55">
-                  {task.assignee} · {task.points} очков · {task.dueLabel}
+                  {task.assignee}
+                  {task.rewardAmount ? ` · ${task.rewardAmount} ₽` : ''}
+                  {' · '}
+                  {task.points} очков · {task.dueLabel}
                 </p>
               </div>
               <Pill

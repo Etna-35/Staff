@@ -45,7 +45,9 @@ export type Task = {
   id: string;
   title: string;
   assignee: string;
+  assigneeId?: string;
   points: number;
+  rewardAmount?: number;
   status: MissionStatus;
   dueLabel: string;
   completedAt?: string;

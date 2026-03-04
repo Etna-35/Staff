@@ -6,6 +6,7 @@ import {
 } from '../lib/timeTracking';
 import {
   getBonusAwardsTotal,
+  getAcceptedTaskRewardTotal,
   getCurrentEmployee,
   getDailyBusinessMetricForDate,
   getDepartmentLabel,
@@ -15,6 +16,7 @@ import {
   getProfileRate,
   getRoleLabel,
   getTeamStats,
+  getTasksForEmployee,
   useAppStore,
 } from '../store/useAppStore';
 import type { TeamDepartment, TimesheetPeriod } from '../types/domain';
@@ -53,7 +55,6 @@ const periodLabels: Record<TimesheetPeriod, string> = {
   month: 'Месяц',
 };
 
-const normalizeAssignee = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
 const toInputValue = (value: number | null) => (value ? String(value) : '');
 const toNullableNumber = (value: string) => {
   const trimmed = value.trim().replace(',', '.');
@@ -770,9 +771,7 @@ export const ProfileScreen = () => {
   }
 
   const isOwner = currentEmployee.role === 'owner';
-  const myTasks = tasks.filter(
-    (task) => normalizeAssignee(task.assignee) === normalizeAssignee(currentEmployee.fullName),
-  );
+  const myTasks = getTasksForEmployee(tasks, currentEmployee);
   const acceptedTasks = myTasks.filter((task) => task.status === 'accepted').length;
   const waitingTasks = myTasks.filter((task) => task.status === 'done').length;
   const overdueTasks = myTasks.filter((task) => task.status === 'returned').length;
@@ -789,7 +788,7 @@ export const ProfileScreen = () => {
   const monthlyHours = getEntriesHours(monthEntries);
   const resolvedRate = getProfileRate(currentEmployee);
   const monthlyShiftIncome = calcEarnings(monthEntries, resolvedRate);
-  const monthlyTaskRewards = 0;
+  const monthlyTaskRewards = getAcceptedTaskRewardTotal(tasks, currentEmployee);
   const monthlyOwnerBonuses = getBonusAwardsTotal(bonusAwards, currentEmployee.id);
   const monthlyIncomeEstimate =
     monthlyShiftIncome + monthlyTaskRewards + monthlyOwnerBonuses;
@@ -914,6 +913,11 @@ export const ProfileScreen = () => {
                 {monthlyOwnerBonuses > 0 ? (
                   <p className="mt-2 text-xs font-semibold text-pine">
                     +{monthlyOwnerBonuses.toFixed(0)} ₽ бонус руководителя
+                  </p>
+                ) : null}
+                {monthlyTaskRewards > 0 ? (
+                  <p className="mt-1 text-xs font-semibold text-pine">
+                    +{monthlyTaskRewards.toFixed(0)} ₽ награды за задачи
                   </p>
                 ) : null}
               </div>

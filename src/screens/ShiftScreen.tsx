@@ -3,17 +3,18 @@ import { initTelegramApp, getTelegramDisplayName } from '../lib/telegram';
 import { durationHours, formatDuration, isBeforeShiftStart } from '../lib/timeTracking';
 import {
   getDailyBusinessMetricsForPeriod,
-  getCurrentActiveEntry,
-  getCurrentEmployee,
-  getEmployeeReflectionForDate,
-  getLocalDateKey,
-  getLoginEmployees,
-  getReceivedSpecialStarsCount,
-  getReceivedStarsCount,
-  getRevenueActualForPeriod,
-  getVisibleStageKeys,
-  useAppStore,
-} from '../store/useAppStore';
+    getCurrentActiveEntry,
+    getCurrentEmployee,
+    getEmployeeReflectionForDate,
+    getLocalDateKey,
+    getLoginEmployees,
+    getReceivedSpecialStarsCount,
+    getReceivedStarsCount,
+    getRevenueActualForPeriod,
+    getTasksForEmployee,
+    getVisibleStageKeys,
+    useAppStore,
+  } from '../store/useAppStore';
 import {
   Card,
   Input,
@@ -141,12 +142,7 @@ export const ShiftScreen = () => {
 
   const completedCount = stages.filter((stage) => stage.done).length;
   const progress = Math.round((completedCount / stages.length) * 100);
-  const normalizeAssignee = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
-  const myTasks = currentEmployee
-    ? tasks.filter(
-        (task) => normalizeAssignee(task.assignee) === normalizeAssignee(currentEmployee.fullName),
-      )
-    : [];
+  const myTasks = getTasksForEmployee(tasks, currentEmployee);
   const acceptedTasksCount = myTasks.filter((task) => task.status === 'accepted').length;
   const checklistTasksCount = currentEmployee?.role && currentEmployee.role !== 'owner' ? 2 : 0;
   const displayedTasksTotal = currentEmployee?.role === 'owner' ? myTasks.length : checklistTasksCount;
