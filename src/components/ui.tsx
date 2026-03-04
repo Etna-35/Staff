@@ -175,6 +175,7 @@ export const ShellHeader = ({
 
 const navItems = [
   { to: '/', label: 'Смена' },
+  { to: '/goals', label: 'Цели' },
   { to: '/missions', label: 'Задачи' },
   { to: '/requests', label: 'Заявки' },
   { to: '/profile', label: 'Я' },
@@ -182,7 +183,7 @@ const navItems = [
 
 export const BottomBar = () => (
   <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md px-4 pb-4 safe-pb">
-    <nav className="grid grid-cols-4 rounded-[1.75rem] border border-white/60 bg-white/90 p-2 shadow-card backdrop-blur">
+    <nav className="grid grid-cols-5 rounded-[1.75rem] border border-white/60 bg-white/90 p-2 shadow-card backdrop-blur">
       {navItems.map((item) => (
         <NavLink
           key={item.to}

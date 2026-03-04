@@ -20,6 +20,27 @@ export type ShiftReflectionPeriod = 'day' | 'week' | 'month';
 
 export type ShiftMood = 'sad' | 'tired' | 'okay' | 'happy' | 'amazing';
 
+export type GoalPeriodType = 'week' | 'month';
+
+export type GoalMetricType =
+  | 'revenue'
+  | 'avg_check'
+  | 'guests'
+  | 'reviews'
+  | 'rating'
+  | 'speed'
+  | 'returning'
+  | 'standards'
+  | 'custom';
+
+export type Department = 'waiters' | 'bar' | 'kitchen' | 'hookah' | 'other';
+
+export type GoalTaskStatus = 'todo' | 'in_progress' | 'done';
+
+export type GoalTaskScope = 'global' | 'role' | 'personal';
+
+export type GoalTaskRole = EmployeeRole | 'hookah';
+
 export type Task = {
   id: string;
   title: string;
@@ -153,6 +174,68 @@ export type DailyBusinessMetric = {
   updatedAt: string;
 };
 
+export type GoalPeriod = {
+  id: string;
+  startAt: string;
+  endAt: string;
+  type: GoalPeriodType;
+  title: string;
+};
+
+export type GoalMetric = {
+  type: GoalMetricType;
+  unit: string;
+  targetValue: number;
+  currentValue: number;
+  label: string;
+};
+
+type GoalTaskBase = {
+  id: string;
+  title: string;
+  description?: string;
+  department: Department;
+  points: number;
+  targetCount?: number;
+  progressCount?: number;
+  status: GoalTaskStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  scope: GoalTaskScope;
+};
+
+export type GlobalTask = GoalTaskBase & {
+  scope: 'global';
+};
+
+export type RoleTask = GoalTaskBase & {
+  scope: 'role';
+  role: GoalTaskRole;
+};
+
+export type PersonalTask = GoalTaskBase & {
+  scope: 'personal';
+  employeeId: string;
+};
+
+export type GoalTask = GlobalTask | RoleTask | PersonalTask;
+
+export type GoalContribution = {
+  department: Department;
+  pointsEarned: number;
+  percent: number;
+  lastUpdatedAt: string | null;
+};
+
+export type GoalsState = {
+  activePeriod: GoalPeriod | null;
+  metric: GoalMetric | null;
+  tasks: GoalTask[];
+  contributions: Record<Department, GoalContribution>;
+  viewerEmployeeId: string | null;
+};
+
 export type AppState = {
   telegramName: string;
   shift: Shift;
@@ -169,4 +252,5 @@ export type AppState = {
   bonusAwards: BonusAward[];
   revenueGoals: RevenueGoals;
   dailyBusinessMetrics: DailyBusinessMetric[];
+  goals: GoalsState;
 };

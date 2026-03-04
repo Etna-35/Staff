@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { ProtectedRoot } from './components/ProtectedRoot';
 import { EmployeesScreen } from './screens/EmployeesScreen';
+import { GoalsScreen } from './screens/GoalsScreen';
 import { HandoffScreen } from './screens/HandoffScreen';
 import { LossesScreen } from './screens/LossesScreen';
 import { MissionsScreen } from './screens/MissionsScreen';
@@ -17,6 +18,10 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <ShiftScreen />,
+      },
+      {
+        path: 'goals',
+        element: <GoalsScreen />,
       },
       {
         path: 'missions',

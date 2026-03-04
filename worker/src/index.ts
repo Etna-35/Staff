@@ -1,7 +1,28 @@
 /* worker/src/index.ts
    Restaurant OS API (Workers + KV) — Full Employees API
 */
-type Role = "waiter" | "bartender" | "chef" | "owner";
+import {
+  applyTaskProgress,
+  buildContributionsFromTasks,
+  buildDefaultGoalMetric,
+  buildGoalPeriod,
+  buildInitialProgressMap,
+  createDefaultGoalTasks,
+  createDefaultPersonalTask,
+  createEmptyGoalContributions,
+  Department,
+  getMetricCurrentValue,
+  getVisibleGoalTasks,
+  GoalContribution,
+  GoalMetric,
+  GoalPeriod,
+  GoalPeriodType,
+  GoalProgressMap,
+  GoalTask,
+  normalizeGoalContributions,
+  Role,
+  mergeGoalTasksWithProgress,
+} from "./goals";
 
 type Employee = {
   id: string;
@@ -59,6 +80,11 @@ const BOOTSTRAP_KEY = "bootstrap:done";
 const SHIFT_REFLECTION_PREFIX = "shift-reflection:";
 const SPECIAL_STAR_PREFIX = "special-star:";
 const BONUS_AWARD_PREFIX = "bonus-award:";
+const GOALS_ACTIVE_KEY = "goals:active";
+const GOALS_TASKS_KEY = "goals:tasks";
+const GOALS_PROGRESS_PREFIX = "goals:progress:";
+const GOALS_CONTRIB_PREFIX = "goals:contrib:";
+const GOALS_RATE_PREFIX = "goals:rate:";
 
 function json(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -80,6 +106,9 @@ function notFound(message = "Not found") {
 }
 function conflict(message: string) {
   return json({ ok: false, error: message }, { status: 409 });
+}
+function tooManyRequests(message: string) {
+  return json({ ok: false, error: message }, { status: 429 });
 }
 
 function normalizeOrigin(o?: string) {
@@ -412,6 +441,181 @@ async function getBonusAwardsForPeriod(
   return grouped
     .flat()
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+function getGoalsProgressKey(periodId: string) {
+  return `${GOALS_PROGRESS_PREFIX}${periodId}`;
+}
+
+function getGoalsContributionKey(periodId: string) {
+  return `${GOALS_CONTRIB_PREFIX}${periodId}`;
+}
+
+function getGoalsRateKey(employeeId: string) {
+  return `${GOALS_RATE_PREFIX}${employeeId}`;
+}
+
+async function getGoalsActive(env: Env): Promise<{ period: GoalPeriod; metric: GoalMetric } | null> {
+  const raw = await env.STAFF_KV.get(GOALS_ACTIVE_KEY);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as { period: GoalPeriod; metric: GoalMetric };
+  } catch {
+    return null;
+  }
+}
+
+async function putGoalsActive(
+  env: Env,
+  payload: { period: GoalPeriod; metric: GoalMetric },
+) {
+  await env.STAFF_KV.put(GOALS_ACTIVE_KEY, JSON.stringify(payload));
+}
+
+async function getGoalTasks(env: Env): Promise<GoalTask[]> {
+  const raw = await env.STAFF_KV.get(GOALS_TASKS_KEY);
+  if (!raw) return [];
+
+  try {
+    return JSON.parse(raw) as GoalTask[];
+  } catch {
+    return [];
+  }
+}
+
+async function putGoalTasks(env: Env, tasks: GoalTask[]) {
+  await env.STAFF_KV.put(GOALS_TASKS_KEY, JSON.stringify(tasks));
+}
+
+async function getGoalProgressMap(env: Env, periodId: string): Promise<GoalProgressMap> {
+  const raw = await env.STAFF_KV.get(getGoalsProgressKey(periodId));
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw) as GoalProgressMap;
+  } catch {
+    return {};
+  }
+}
+
+async function putGoalProgressMap(env: Env, periodId: string, progressMap: GoalProgressMap) {
+  await env.STAFF_KV.put(getGoalsProgressKey(periodId), JSON.stringify(progressMap));
+}
+
+async function getGoalContributions(
+  env: Env,
+  periodId: string,
+): Promise<Record<Department, GoalContribution>> {
+  const raw = await env.STAFF_KV.get(getGoalsContributionKey(periodId));
+  if (!raw) {
+    return createEmptyGoalContributions();
+  }
+
+  try {
+    return normalizeGoalContributions(JSON.parse(raw) as Record<Department, GoalContribution>);
+  } catch {
+    return createEmptyGoalContributions();
+  }
+}
+
+async function putGoalContributions(
+  env: Env,
+  periodId: string,
+  contributions: Record<Department, GoalContribution>,
+) {
+  await env.STAFF_KV.put(
+    getGoalsContributionKey(periodId),
+    JSON.stringify(normalizeGoalContributions(contributions)),
+  );
+}
+
+async function ensureGoalsData(
+  env: Env,
+  employee?: { id: string; role: Role } | null,
+) {
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  let active = await getGoalsActive(env);
+  if (!active) {
+    const period = buildGoalPeriod("month", now);
+    const tasks = createDefaultGoalTasks(nowIso);
+    const progressMap = buildInitialProgressMap(tasks);
+    const contributions = buildContributionsFromTasks(tasks);
+    const metric = {
+      ...buildDefaultGoalMetric(120),
+      currentValue: getMetricCurrentValue(contributions),
+    };
+
+    active = { period, metric };
+    await putGoalsActive(env, active);
+    await putGoalTasks(env, tasks);
+    await putGoalProgressMap(env, period.id, progressMap);
+    await putGoalContributions(env, period.id, contributions);
+  }
+
+  let tasks = await getGoalTasks(env);
+  if (tasks.length === 0) {
+    tasks = createDefaultGoalTasks(nowIso);
+    await putGoalTasks(env, tasks);
+    const contributions = buildContributionsFromTasks(tasks);
+    await putGoalProgressMap(env, active.period.id, buildInitialProgressMap(tasks));
+    await putGoalContributions(env, active.period.id, contributions);
+    await putGoalsActive(env, {
+      period: active.period,
+      metric: {
+        ...active.metric,
+        currentValue: getMetricCurrentValue(contributions),
+      },
+    });
+  }
+
+  if (employee) {
+    const hasPersonalTask = tasks.some(
+      (task) => task.scope === "personal" && task.employeeId === employee.id,
+    );
+
+    if (!hasPersonalTask) {
+      const personalTask = createDefaultPersonalTask(employee.id, employee.role, nowIso);
+      tasks = [...tasks, personalTask];
+      await putGoalTasks(env, tasks);
+
+      const progressMap = await getGoalProgressMap(env, active.period.id);
+      await putGoalProgressMap(env, active.period.id, {
+        ...progressMap,
+        [personalTask.id]: {
+          progressCount: personalTask.progressCount ?? 0,
+          status: personalTask.status,
+          updatedAt: personalTask.updatedAt,
+          completedAt: personalTask.completedAt,
+        },
+      });
+    }
+  }
+
+  const progressMap = await getGoalProgressMap(env, active.period.id);
+  const contributions = await getGoalContributions(env, active.period.id);
+  const mergedTasks = mergeGoalTasksWithProgress(tasks, progressMap);
+  const nextMetric = {
+    ...active.metric,
+    currentValue: getMetricCurrentValue(contributions),
+  };
+
+  if (nextMetric.currentValue !== active.metric.currentValue) {
+    active = {
+      period: active.period,
+      metric: nextMetric,
+    };
+    await putGoalsActive(env, active);
+  }
+
+  return {
+    activePeriod: active.period,
+    metric: nextMetric,
+    tasks: mergedTasks,
+    contributions,
+  };
 }
 
 export default {
@@ -785,6 +989,162 @@ export default {
       await env.STAFF_KV.put(getBonusAwardKey(dateKey, award.id), JSON.stringify(award));
 
       return withCors(request, env, json({ ok: true, award }, { status: 201 }));
+    }
+
+    if (request.method === "GET" && path === "/api/goals/active") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const goals = await ensureGoalsData(env, { id: emp.id, role: emp.role });
+      const visibleTasks = getVisibleGoalTasks(goals.tasks, {
+        employeeId: emp.id,
+        role: emp.role,
+      });
+
+      return withCors(
+        request,
+        env,
+        json({
+          ok: true,
+          activePeriod: goals.activePeriod,
+          metric: goals.metric,
+          tasks: visibleTasks,
+          contributions: goals.contributions,
+        }),
+      );
+    }
+
+    const goalTaskProgressMatch = path.match(/^\/api\/goals\/task\/([^/]+)\/progress$/);
+
+    if (goalTaskProgressMatch && request.method === "POST") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const rateKey = getGoalsRateKey(emp.id);
+      const nowMs = Date.now();
+      const lastActionRaw = await env.STAFF_KV.get(rateKey);
+      const lastActionMs = lastActionRaw ? Number(lastActionRaw) : 0;
+
+      if (lastActionMs && nowMs - lastActionMs < 500) {
+        return withCors(request, env, tooManyRequests("Слишком быстро. Повторите через секунду."));
+      }
+
+      const body = await readJson<{ delta?: number }>(request);
+      const requestedDelta = typeof body?.delta === "number" ? body.delta : 1;
+
+      if (requestedDelta < 1) {
+        return withCors(request, env, badRequest("delta must be greater than 0"));
+      }
+
+      const taskId = goalTaskProgressMatch[1];
+      const goals = await ensureGoalsData(env, { id: emp.id, role: emp.role });
+      const visibleTasks = getVisibleGoalTasks(goals.tasks, {
+        employeeId: emp.id,
+        role: emp.role,
+      });
+      const task = visibleTasks.find((item) => item.id === taskId);
+
+      if (!task) {
+        return withCors(request, env, notFound("Goal task not found"));
+      }
+
+      const progressMap = await getGoalProgressMap(env, goals.activePeriod.id);
+      const contributions = await getGoalContributions(env, goals.activePeriod.id);
+      const updatedAt = new Date().toISOString();
+      const applied = applyTaskProgress(task, progressMap, contributions, requestedDelta, updatedAt);
+      const nextMetric = {
+        ...goals.metric,
+        currentValue: getMetricCurrentValue(applied.contributions),
+      };
+
+      await putGoalProgressMap(env, goals.activePeriod.id, applied.progressMap);
+      await putGoalContributions(env, goals.activePeriod.id, applied.contributions);
+      await putGoalsActive(env, {
+        period: goals.activePeriod,
+        metric: nextMetric,
+      });
+      await env.STAFF_KV.put(rateKey, String(nowMs), { expirationTtl: 60 });
+
+      return withCors(
+        request,
+        env,
+        json({
+          ok: true,
+          task: applied.task,
+          metric: nextMetric,
+          contributions: applied.contributions,
+        }),
+      );
+    }
+
+    if (request.method === "POST" && path === "/api/goals/active") {
+      if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
+
+      const body = await readJson<{
+        type: GoalPeriodType;
+        targetValue: number;
+        title?: string;
+        unit?: string;
+        label?: string;
+        resetProgress?: boolean;
+      }>(request);
+      if (!body) return withCors(request, env, badRequest("Expected JSON body"));
+
+      if (!(body.targetValue > 0)) {
+        return withCors(request, env, badRequest("targetValue must be greater than 0"));
+      }
+
+      const type = body.type === "week" ? "week" : "month";
+      const period = buildGoalPeriod(type, new Date(), body.title?.trim() || undefined);
+      const currentGoals = await ensureGoalsData(env, { id: session.employeeId, role: session.role });
+      const shouldReset =
+        Boolean(body.resetProgress) || currentGoals.activePeriod.id !== period.id;
+      const tasks = await getGoalTasks(env);
+      const progressMap = shouldReset
+        ? tasks.reduce<GoalProgressMap>((result, task) => {
+            result[task.id] = {
+              progressCount: 0,
+              status: "todo",
+              updatedAt: new Date().toISOString(),
+            };
+            return result;
+          }, {})
+        : await getGoalProgressMap(env, currentGoals.activePeriod.id);
+      const contributions = shouldReset
+        ? createEmptyGoalContributions()
+        : await getGoalContributions(env, currentGoals.activePeriod.id);
+      const metric: GoalMetric = {
+        type: "custom",
+        unit: body.unit?.trim() || "pts",
+        targetValue: body.targetValue,
+        currentValue: getMetricCurrentValue(contributions),
+        label: body.label?.trim() || "Командный прогресс",
+      };
+
+      await putGoalsActive(env, { period, metric });
+      await putGoalProgressMap(env, period.id, progressMap);
+      await putGoalContributions(env, period.id, contributions);
+
+      const visibleTasks = getVisibleGoalTasks(mergeGoalTasksWithProgress(tasks, progressMap), {
+        employeeId: session.employeeId,
+        role: session.role,
+      });
+
+      return withCors(
+        request,
+        env,
+        json({
+          ok: true,
+          activePeriod: period,
+          metric,
+          tasks: visibleTasks,
+          contributions,
+        }),
+      );
     }
 
     const bonusAwardMatch = path.match(/^\/api\/bonus-awards\/([^/]+)$/);

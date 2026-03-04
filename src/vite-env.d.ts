@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vitest/globals" />
 
 type TelegramUser = {
   id?: number;
@@ -20,4 +21,3 @@ interface Window {
     WebApp?: TelegramWebApp;
   };
 }
-

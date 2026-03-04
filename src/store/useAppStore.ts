@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { apiClient, ApiError } from '../api/client';
 import { mockState } from '../data/mock';
+import {
+  applyGoalTaskProgress,
+  createEmptyGoalContributions,
+  normalizeGoalContributions,
+} from '../lib/goals';
 import { isValidPinFormat } from '../lib/pinAuth';
 import {
   MIN_SHIFT_MINUTES,
@@ -20,9 +25,15 @@ import {
 import type {
   AppState,
   BonusAward,
+  Department,
   DailyBusinessMetric,
   Employee,
   EmployeeRole,
+  GoalContribution,
+  GoalMetric,
+  GoalPeriod,
+  GoalPeriodType,
+  GoalTask,
   HandoffArea,
   RequestCategory,
   SpecialStarAward,
@@ -81,6 +92,15 @@ type RevenueGoalsInput = {
   monthlyAverageCheckTarget: number | null;
 };
 
+type GoalSettingsInput = {
+  type: GoalPeriodType;
+  targetValue: number;
+  title?: string;
+  unit?: string;
+  label?: string;
+  resetProgress?: boolean;
+};
+
 type DailyBusinessMetricInput = {
   dateKey: string;
   revenueActual: number | null;
@@ -100,6 +120,9 @@ type Store = AppState & {
   shiftReflectionsLoading: boolean;
   specialStarAwardsLoading: boolean;
   bonusAwardsLoading: boolean;
+  goalsLoading: boolean;
+  goalsSyncDisabled: boolean;
+  goalsError: string | null;
   authError: string | null;
   setTelegramName: (name: string) => void;
   clearAuthError: () => void;
@@ -155,6 +178,9 @@ type Store = AppState & {
     awardId: string;
     dateKey: string;
   }) => Promise<ActionResult>;
+  loadGoals: () => Promise<void>;
+  completeTask: (taskId: string, delta?: number) => Promise<ActionResult>;
+  setGoalPeriod: (input: GoalSettingsInput) => Promise<ActionResult>;
   saveRevenueGoals: (input: RevenueGoalsInput) => ActionResult;
   saveDailyBusinessMetric: (input: DailyBusinessMetricInput) => ActionResult;
   resetDemo: () => void;
@@ -171,10 +197,34 @@ type PersistedStoreSlice = Pick<
   | 'timeEntries'
   | 'revenueGoals'
   | 'dailyBusinessMetrics'
+  | 'goals'
   | 'session'
 >;
 
 const storageKey = 'restaurant-os-mvp';
+
+const noopStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
+
+const getPersistStorage = () => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage;
+  }
+
+  if (
+    typeof globalThis !== 'undefined' &&
+    'localStorage' in globalThis &&
+    typeof globalThis.localStorage?.getItem === 'function' &&
+    typeof globalThis.localStorage?.setItem === 'function'
+  ) {
+    return globalThis.localStorage;
+  }
+
+  return noopStorage;
+};
 
 const cloneInitialState = (): AppState =>
   JSON.parse(JSON.stringify(mockState)) as AppState;
@@ -196,6 +246,15 @@ const normalizeState = (state: AppState): AppState => ({
   shiftReflections: state.shiftReflections ?? [],
   specialStarAwards: state.specialStarAwards ?? [],
   bonusAwards: state.bonusAwards ?? [],
+  goals: {
+    activePeriod: state.goals?.activePeriod ?? null,
+    metric: state.goals?.metric ?? null,
+    tasks: state.goals?.tasks ?? [],
+    contributions: normalizeGoalContributions(
+      state.goals?.contributions ?? createEmptyGoalContributions(),
+    ),
+    viewerEmployeeId: state.goals?.viewerEmployeeId ?? null,
+  },
   revenueGoals: {
     weeklyRevenueTarget: state.revenueGoals?.weeklyRevenueTarget ?? null,
     monthlyRevenueTarget: state.revenueGoals?.monthlyRevenueTarget ?? null,
@@ -292,6 +351,28 @@ const sortSpecialStarAwards = (awards: SpecialStarAward[]) =>
 const sortBonusAwards = (awards: BonusAward[]) =>
   [...awards].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
+const mergeGoalsState = ({
+  activePeriod,
+  metric,
+  tasks,
+  contributions,
+  viewerEmployeeId,
+}: {
+  activePeriod?: GoalPeriod | null;
+  metric?: GoalMetric | null;
+  tasks?: GoalTask[];
+  contributions?: Record<Department, GoalContribution>;
+  viewerEmployeeId?: string | null;
+}) => ({
+  activePeriod: activePeriod ?? null,
+  metric: metric ?? null,
+  tasks: tasks ?? [],
+  contributions: normalizeGoalContributions(
+    contributions ?? createEmptyGoalContributions(),
+  ),
+  viewerEmployeeId: viewerEmployeeId ?? null,
+});
+
 export const useAppStore = create<Store>()(
   persist(
     (set, get) => ({
@@ -301,11 +382,14 @@ export const useAppStore = create<Store>()(
       shiftReflectionsLoading: false,
       specialStarAwardsLoading: false,
       bonusAwardsLoading: false,
+      goalsLoading: false,
+      goalsSyncDisabled: false,
+      goalsError: null,
       authError: null,
       setTelegramName: (name) => set({ telegramName: name }),
       clearAuthError: () => set({ authError: null }),
       loadBootstrapStatus: async () => {
-        set({ authError: null });
+        set({ authError: null, goalsError: null });
 
         try {
           const { bootstrapped } = await apiClient.getBootstrapStatus();
@@ -320,6 +404,14 @@ export const useAppStore = create<Store>()(
             shiftReflections: bootstrapped ? state.shiftReflections : [],
             specialStarAwards: bootstrapped ? state.specialStarAwards : [],
             bonusAwards: bootstrapped ? state.bonusAwards : [],
+            goals: bootstrapped
+              ? state.goals
+              : mergeGoalsState({
+                  activePeriod: state.goals.activePeriod,
+                  metric: state.goals.metric,
+                  contributions: state.goals.contributions,
+                }),
+            goalsSyncDisabled: false,
           }));
 
           if (bootstrapped) {
@@ -331,6 +423,7 @@ export const useAppStore = create<Store>()(
               error instanceof ApiError
                 ? error.message
                 : 'Не удалось подключиться к серверу доступа.',
+            goalsError: null,
           });
         }
       },
@@ -427,6 +520,8 @@ export const useAppStore = create<Store>()(
             shiftReflections: [],
             specialStarAwards: [],
             bonusAwards: [],
+            goalsSyncDisabled: false,
+            goalsError: null,
           }));
           await get().loadMe();
           await get().refreshLoginEmployees().catch(() => undefined);
@@ -472,6 +567,8 @@ export const useAppStore = create<Store>()(
             shiftReflections: [],
             specialStarAwards: [],
             bonusAwards: [],
+            goalsSyncDisabled: false,
+            goalsError: null,
           }));
           await get().loadMe();
 
@@ -496,6 +593,9 @@ export const useAppStore = create<Store>()(
           specialStarAwardsLoading: false,
           bonusAwards: [],
           bonusAwardsLoading: false,
+          goalsLoading: false,
+          goalsSyncDisabled: false,
+          goalsError: null,
           session: {
             ...state.session,
             token: null,
@@ -1272,6 +1372,197 @@ export const useAppStore = create<Store>()(
           };
         }
       },
+      loadGoals: async () => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || !currentEmployee) {
+          set({
+            goalsLoading: false,
+            goalsSyncDisabled: true,
+            goalsError: 'Нужна активная сессия сотрудника.',
+            goals: mergeGoalsState({
+              activePeriod: get().goals.activePeriod,
+              metric: get().goals.metric,
+              contributions: get().goals.contributions,
+            }),
+          });
+          return;
+        }
+
+        set({ goalsLoading: true, goalsError: null });
+
+        try {
+          const payload = await apiClient.getGoalsActive(token, () => get().logout());
+
+          set({
+            authError: null,
+            goalsLoading: false,
+            goalsSyncDisabled: false,
+            goalsError: null,
+            goals: mergeGoalsState({
+              activePeriod: payload.activePeriod,
+              metric: payload.metric,
+              tasks: payload.tasks,
+              contributions: payload.contributions,
+              viewerEmployeeId: currentEmployee.id,
+            }),
+          });
+        } catch (error) {
+          const cachedGoals = get().goals;
+          const canReuseCachedTasks = cachedGoals.viewerEmployeeId === currentEmployee.id;
+
+          set({
+            goalsLoading: false,
+            goalsSyncDisabled: true,
+            goalsError:
+              error instanceof ApiError
+                ? error.message
+                : 'Нет связи с общей целью. Показываем сохраненные данные.',
+            goals: mergeGoalsState({
+              activePeriod: cachedGoals.activePeriod,
+              metric: cachedGoals.metric,
+              tasks: canReuseCachedTasks ? cachedGoals.tasks : [],
+              contributions: cachedGoals.contributions,
+              viewerEmployeeId: currentEmployee.id,
+            }),
+          });
+        }
+      },
+      completeTask: async (taskId, delta = 1) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+        const state = get();
+
+        if (!token || !currentEmployee) {
+          return {
+            ok: false,
+            reason: 'Сначала войдите по PIN',
+          };
+        }
+
+        if (state.goalsSyncDisabled) {
+          return {
+            ok: false,
+            reason: 'Сейчас нет связи. Показываем кэш, синхронизация временно недоступна.',
+          };
+        }
+
+        const currentGoals = state.goals;
+        const optimistic = applyGoalTaskProgress(
+          currentGoals.tasks,
+          currentGoals.contributions,
+          currentGoals.metric,
+          taskId,
+          delta,
+        );
+
+        if (!optimistic.task) {
+          return {
+            ok: false,
+            reason: 'Задача не найдена',
+          };
+        }
+
+        set({
+          goals: mergeGoalsState({
+            activePeriod: currentGoals.activePeriod,
+            metric: optimistic.metric,
+            tasks: optimistic.tasks,
+            contributions: optimistic.contributions,
+            viewerEmployeeId: currentGoals.viewerEmployeeId,
+          }),
+        });
+
+        try {
+          const payload = await apiClient.progressGoalTask(token, taskId, delta, () =>
+            get().logout(),
+          );
+
+          set((nextState) => ({
+            authError: null,
+            goalsSyncDisabled: false,
+            goalsError: null,
+            goals: mergeGoalsState({
+              activePeriod: nextState.goals.activePeriod,
+              metric: payload.metric,
+              tasks: nextState.goals.tasks.map((task) =>
+                task.id === payload.task.id ? payload.task : task,
+              ),
+              contributions: payload.contributions,
+              viewerEmployeeId: nextState.goals.viewerEmployeeId,
+            }),
+          }));
+
+          return { ok: true };
+        } catch (error) {
+          set({
+            goals: currentGoals,
+            goalsSyncDisabled: true,
+            goalsError:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось синхронизировать выполнение задачи.',
+          });
+
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось синхронизировать выполнение задачи.',
+          };
+        }
+      },
+      setGoalPeriod: async (input) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        if (!(input.targetValue > 0)) {
+          return {
+            ok: false,
+            reason: 'Укажите цель больше нуля',
+          };
+        }
+
+        try {
+          const payload = await apiClient.setActiveGoal(
+            token,
+            {
+              ...input,
+            },
+            () => get().logout(),
+          );
+
+          set({
+            authError: null,
+            goalsSyncDisabled: false,
+            goalsError: null,
+            goals: mergeGoalsState({
+              activePeriod: payload.activePeriod,
+              metric: payload.metric,
+              tasks: payload.tasks,
+              contributions: payload.contributions,
+              viewerEmployeeId: currentEmployee.id,
+            }),
+          });
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось обновить цель периода',
+          };
+        }
+      },
       saveRevenueGoals: (input) => {
         const currentEmployee = getCurrentEmployee(get());
 
@@ -1360,12 +1651,15 @@ export const useAppStore = create<Store>()(
           shiftReflectionsLoading: false,
           specialStarAwardsLoading: false,
           bonusAwardsLoading: false,
+          goalsLoading: false,
+          goalsSyncDisabled: false,
+          goalsError: null,
         })),
     }),
     {
       name: storageKey,
-      version: 8,
-      storage: createJSONStorage(() => localStorage),
+      version: 9,
+      storage: createJSONStorage(getPersistStorage),
       migrate: (persistedState) => persistedState as PersistedStoreSlice,
       partialize: (state): PersistedStoreSlice => ({
         telegramName: state.telegramName,
@@ -1377,6 +1671,7 @@ export const useAppStore = create<Store>()(
         timeEntries: state.timeEntries,
         revenueGoals: state.revenueGoals,
         dailyBusinessMetrics: state.dailyBusinessMetrics,
+        goals: state.goals,
         session: {
           token: state.session.token,
           bootstrapped: null,
@@ -1398,6 +1693,7 @@ export const useAppStore = create<Store>()(
           revenueGoals: persisted.revenueGoals ?? baseState.revenueGoals,
           dailyBusinessMetrics:
             persisted.dailyBusinessMetrics ?? baseState.dailyBusinessMetrics,
+          goals: persisted.goals ?? baseState.goals,
           employees: [],
           loginEmployees: [],
           session: createAnonymousSession({
@@ -1413,6 +1709,9 @@ export const useAppStore = create<Store>()(
           shiftReflectionsLoading: false,
           specialStarAwardsLoading: false,
           bonusAwardsLoading: false,
+          goalsLoading: false,
+          goalsSyncDisabled: false,
+          goalsError: null,
           authError: null,
         };
       },

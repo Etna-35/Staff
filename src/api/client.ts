@@ -1,8 +1,14 @@
 import type {
+  BonusAward,
+  Department,
   Employee,
   EmployeeLoginOption,
   EmployeeRole,
-  BonusAward,
+  GoalContribution,
+  GoalMetric,
+  GoalPeriod,
+  GoalPeriodType,
+  GoalTask,
   SpecialStarAward,
   ShiftMood,
   ShiftReflection,
@@ -65,6 +71,21 @@ type BonusAwardListResponse = {
 type BonusAwardResponse = {
   ok: boolean;
   award: BonusAward;
+};
+
+type GoalsActiveResponse = {
+  ok: boolean;
+  activePeriod: GoalPeriod | null;
+  metric: GoalMetric | null;
+  tasks: GoalTask[];
+  contributions: Record<Department, GoalContribution>;
+};
+
+type GoalTaskProgressResponse = {
+  ok: boolean;
+  task: GoalTask;
+  metric: GoalMetric | null;
+  contributions: Record<Department, GoalContribution>;
 };
 
 export class ApiError extends Error {
@@ -324,6 +345,41 @@ export const apiClient = {
     request<{ ok: boolean }>(`/api/bonus-awards/${awardId}?dateKey=${dateKey}`, {
       method: 'DELETE',
       token,
+      onUnauthorized,
+    }),
+  getGoalsActive: (token: string, onUnauthorized?: () => void) =>
+    request<GoalsActiveResponse>('/api/goals/active', {
+      token,
+      onUnauthorized,
+    }),
+  progressGoalTask: (
+    token: string,
+    taskId: string,
+    delta = 1,
+    onUnauthorized?: () => void,
+  ) =>
+    request<GoalTaskProgressResponse>(`/api/goals/task/${taskId}/progress`, {
+      method: 'POST',
+      token,
+      body: { delta },
+      onUnauthorized,
+    }),
+  setActiveGoal: (
+    token: string,
+    input: {
+      type: GoalPeriodType;
+      targetValue: number;
+      title?: string;
+      unit?: string;
+      label?: string;
+      resetProgress?: boolean;
+    },
+    onUnauthorized?: () => void,
+  ) =>
+    request<GoalsActiveResponse>('/api/goals/active', {
+      method: 'POST',
+      token,
+      body: input,
       onUnauthorized,
     }),
 };
