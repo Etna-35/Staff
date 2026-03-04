@@ -677,8 +677,6 @@ const OwnerStats = () => {
 export const ProfileScreen = () => {
   const {
     tasks,
-    losses,
-    resetDemo,
     timeEntries,
     setHourlyRate,
     changeMyPin,
@@ -748,16 +746,13 @@ export const ProfileScreen = () => {
   const totalPoints = myTasks
     .filter((task) => task.status === 'accepted')
     .reduce((sum, task) => sum + task.points, 0);
-  const weeklyLoss = losses.spoilage + losses.staffMeal;
   const myEntries = timeEntries.filter((entry) => entry.userId === currentEmployee.id);
   const todayEntries = getEntriesForPeriod(myEntries, 'day');
-  const weekEntries = getEntriesForPeriod(myEntries, 'week');
   const monthEntries = getEntriesForPeriod(myEntries, 'month');
   const todayClosedEntries = myEntries.filter(
     (entry) => entry.endAt && isSameDay(new Date(entry.endAt), new Date()),
   );
   const todayHours = getEntriesHours(todayEntries);
-  const weeklyHours = getEntriesHours(weekEntries);
   const monthlyHours = getEntriesHours(monthEntries);
   const resolvedRate = getProfileRate(currentEmployee);
   const monthlyShiftIncome = calcEarnings(monthEntries, resolvedRate);
@@ -864,7 +859,7 @@ export const ProfileScreen = () => {
                   className="text-sm font-semibold text-clay"
                   onClick={() => setEarningsVisible((current) => !current)}
                 >
-                  👁 Показать
+                  👁
                 </button>
               }
             />
@@ -883,6 +878,11 @@ export const ProfileScreen = () => {
                     visible={earningsVisible}
                   />
                 </div>
+                {monthlyOwnerBonuses > 0 ? (
+                  <p className="mt-2 text-xs font-semibold text-pine">
+                    +{monthlyOwnerBonuses.toFixed(0)} ₽ бонус руководителя
+                  </p>
+                ) : null}
               </div>
             </div>
           </Card>
@@ -920,30 +920,10 @@ export const ProfileScreen = () => {
             </Card>
           </div>
 
-          <Card>
-            <SectionTitle title="Неделя" />
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-fog p-3">
-                <p className="text-xs text-ink/50">Потери</p>
-                <p className="mt-1 text-xl font-semibold">{weeklyLoss} ₽</p>
-                <p className="text-xs text-ink/50">Если без выручки, показываем сумму</p>
-              </div>
-              <div className="rounded-2xl bg-fog p-3">
-                <p className="text-xs text-ink/50">Часы</p>
-                <p className="mt-1 text-xl font-semibold">{weeklyHours.toFixed(1)} ч</p>
-                <p className="text-xs text-ink/50">Локальный табель за неделю</p>
-              </div>
-            </div>
-          </Card>
         </>
       )}
 
       <OwnerStats />
-
-      <Card>
-        <SectionTitle title="Сервис" />
-        <SecondaryButton onClick={resetDemo}>Сбросить демо-данные</SecondaryButton>
-      </Card>
 
       {showOwnerPanelModal ? (
         <div className="fixed inset-0 z-20 flex items-end bg-black/30">

@@ -22,6 +22,22 @@ export const MissionsScreen = () => {
     [tasks],
   );
 
+  if (currentEmployee?.role !== 'owner') {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="font-display text-2xl font-semibold">Задачи</h1>
+        </div>
+        <Card>
+          <p className="text-sm font-semibold text-ink">Раздел в работе</p>
+          <p className="mt-2 text-sm text-ink/60">
+            Для сотрудников задачи скоро появятся в более удобном формате.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   const submitTask = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -38,80 +54,75 @@ export const MissionsScreen = () => {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-ink/55">Задачи смены</p>
-        <h1 className="font-display text-2xl font-semibold">Принятие без чатов</h1>
+        <h1 className="font-display text-2xl font-semibold">Задачи</h1>
       </div>
 
-      {currentEmployee?.role === 'owner' ? (
-        <Card>
-          <SectionTitle title="Новая задача" />
-          <form className="space-y-3" onSubmit={submitTask}>
-            <Input
-              placeholder="Что нужно сделать"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-            <Input
-              placeholder="Исполнитель"
-              value={assignee}
-              onChange={(event) => setAssignee(event.target.value)}
-            />
-            <Input
-              type="number"
-              min="0"
-              placeholder="Очки"
-              value={points}
-              onChange={(event) => setPoints(event.target.value)}
-            />
-            <PrimaryButton type="submit">Создать задачу</PrimaryButton>
-          </form>
-        </Card>
-      ) : null}
+      <Card>
+        <SectionTitle title="Новая задача" />
+        <form className="space-y-3" onSubmit={submitTask}>
+          <Input
+            placeholder="Что нужно сделать"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+          <Input
+            placeholder="Исполнитель"
+            value={assignee}
+            onChange={(event) => setAssignee(event.target.value)}
+          />
+          <Input
+            type="number"
+            min="0"
+            placeholder="Очки"
+            value={points}
+            onChange={(event) => setPoints(event.target.value)}
+          />
+          <PrimaryButton type="submit">Создать задачу</PrimaryButton>
+        </form>
+      </Card>
 
-      {currentEmployee?.role === 'owner' ? (
-        <Card>
-          <SectionTitle title="На приемку" action={<Pill tone="warning">{pendingReview.length}</Pill>} />
-          <div className="space-y-3">
-            {pendingReview.length === 0 ? (
-              <p className="text-sm text-ink/55">Ничего не ждет решения.</p>
-            ) : (
-              pendingReview.map((task) => (
-                <div key={task.id} className="rounded-2xl bg-fog p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{task.title}</p>
-                      <p className="text-sm text-ink/55">{task.assignee}</p>
-                    </div>
-                    <Pill tone="warning">Готово</Pill>
+      <Card>
+        <SectionTitle title="На приемку" action={<Pill tone="warning">{pendingReview.length}</Pill>} />
+        <div className="space-y-3">
+          {pendingReview.length === 0 ? (
+            <p className="text-sm text-ink/55">Ничего не ждет решения.</p>
+          ) : (
+            pendingReview.map((task) => (
+              <div key={task.id} className="rounded-2xl bg-fog p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{task.title}</p>
+                    <p className="text-sm text-ink/55">{task.assignee}</p>
                   </div>
-                  <Input
-                    className="mt-3"
-                    placeholder="Причина возврата"
-                    value={returnReasons[task.id] ?? ''}
-                    onChange={(event) =>
-                      setReturnReasons((current) => ({
-                        ...current,
-                        [task.id]: event.target.value,
-                      }))
-                    }
-                  />
-                  <div className="mt-3 flex gap-3">
-                    <PrimaryButton className="flex-1" onClick={() => acceptTask(task.id)}>
-                      Принять
-                    </PrimaryButton>
-                    <SecondaryButton
-                      className="flex-1"
-                      onClick={() => returnTask(task.id, returnReasons[task.id] ?? '')}
-                    >
-                      Вернуть
-                    </SecondaryButton>
-                  </div>
+                  <Pill tone="warning">Готово</Pill>
                 </div>
-              ))
-            )}
-          </div>
-        </Card>
-      ) : null}
+                <Input
+                  className="mt-3"
+                  placeholder="Причина возврата"
+                  value={returnReasons[task.id] ?? ''}
+                  onChange={(event) =>
+                    setReturnReasons((current) => ({
+                      ...current,
+                      [task.id]: event.target.value,
+                    }))
+                  }
+                />
+                <div className="mt-3 flex gap-3">
+                  <PrimaryButton className="flex-1" onClick={() => acceptTask(task.id)}>
+                    Принять
+                  </PrimaryButton>
+                  <SecondaryButton
+                    className="flex-1"
+                    onClick={() => returnTask(task.id, returnReasons[task.id] ?? '')}
+                  >
+                    Вернуть
+                  </SecondaryButton>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
 
       <div className="space-y-3">
         {tasks.map((task) => (

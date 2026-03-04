@@ -92,6 +92,7 @@ export const ShiftScreen = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
   const loginEmployees = useAppStore(getLoginEmployees);
+  const isOwner = currentEmployee?.role === 'owner';
   const [showPhotos, setShowPhotos] = useState(false);
   const [showEarlyStartModal, setShowEarlyStartModal] = useState(false);
   const [earlyReason, setEarlyReason] = useState('');
@@ -462,53 +463,55 @@ export const ShiftScreen = () => {
         </div>
       </Card>
 
-      <div>
-        <SectionTitle title="Этапы" />
-        <div className="space-y-3">
-          {stages.map((stage) => {
-            const meta = stageMeta[stage.key];
-            const statusIcon = stage.done ? '✅' : stage.key === 'losses' ? '🟡' : '⬜';
+      {isOwner ? (
+        <div>
+          <SectionTitle title="Этапы" />
+          <div className="space-y-3">
+            {stages.map((stage) => {
+              const meta = stageMeta[stage.key];
+              const statusIcon = stage.done ? '✅' : stage.key === 'losses' ? '🟡' : '⬜';
 
-            return (
-              <Card key={stage.key} className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{statusIcon}</span>
-                    <h3 className="font-semibold">{meta.title}</h3>
+              return (
+                <Card key={stage.key} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{statusIcon}</span>
+                      <h3 className="font-semibold">{meta.title}</h3>
+                    </div>
+                    <p className="mt-1 text-sm text-ink/60">{meta.description}</p>
                   </div>
-                  <p className="mt-1 text-sm text-ink/60">{meta.description}</p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  {meta.href ? (
-                    <Link
-                      to={meta.href}
-                      className="rounded-2xl bg-fog px-3 py-2 text-sm font-semibold"
-                    >
-                      Открыть
-                    </Link>
-                  ) : null}
-                  {stage.key === 'leftovers' ? (
-                    <button
-                      className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                      onClick={() => completeStage('leftovers')}
-                    >
-                      Готово
-                    </button>
-                  ) : null}
-                  {stage.key === 'closingPhotos' ? (
-                    <button
-                      className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                      onClick={() => setShowPhotos(true)}
-                    >
-                      Фото
-                    </button>
-                  ) : null}
-                </div>
-              </Card>
-            );
-          })}
+                  <div className="flex shrink-0 gap-2">
+                    {meta.href ? (
+                      <Link
+                        to={meta.href}
+                        className="rounded-2xl bg-fog px-3 py-2 text-sm font-semibold"
+                      >
+                        Открыть
+                      </Link>
+                    ) : null}
+                    {stage.key === 'leftovers' ? (
+                      <button
+                        className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
+                        onClick={() => completeStage('leftovers')}
+                      >
+                        Готово
+                      </button>
+                    ) : null}
+                    {stage.key === 'closingPhotos' ? (
+                      <button
+                        className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
+                        onClick={() => setShowPhotos(true)}
+                      >
+                        Фото
+                      </button>
+                    ) : null}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {showPhotos ? (
         <div className="fixed inset-0 z-20 flex items-end bg-black/30">

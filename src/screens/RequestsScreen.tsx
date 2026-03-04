@@ -238,10 +238,6 @@ export const RequestsScreen = () => {
 
   return (
     <div className={`space-y-4 ${category === 'kitchen' && selectedItems.length ? 'pb-28' : ''}`}>
-      <div>
-        <p className="text-sm text-ink/55">Заявки</p>
-      </div>
-
       <div className="grid grid-cols-3 gap-3">
         {requestOptions.map((option) => (
           <button
