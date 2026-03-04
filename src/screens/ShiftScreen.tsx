@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { appLinks } from '../config/links';
 import { initTelegramApp, getTelegramDisplayName } from '../lib/telegram';
 import { durationHours, formatDuration, isBeforeShiftStart } from '../lib/timeTracking';
 import {
@@ -27,30 +25,6 @@ import {
   ShellHeader,
 } from '../components/ui';
 import type { ShiftMood } from '../types/domain';
-
-const stageMeta: Record<
-  'leftovers' | 'losses' | 'handoff' | 'closingPhotos',
-  { title: string; description: string; href?: string }
-> = {
-  leftovers: {
-    title: 'Остатки',
-    description: 'Короткая отметка после пересчета.',
-  },
-  losses: {
-    title: 'Потери',
-    description: 'Порча, стафф и R&D.',
-    href: '/shift/losses',
-  },
-  handoff: {
-    title: 'Передача',
-    description: 'Кухня и бар на следующее утро.',
-    href: '/shift/handoff',
-  },
-  closingPhotos: {
-    title: 'Фото закрытия',
-    description: 'Пока как ссылка и подтверждение.',
-  },
-} as const;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
@@ -96,7 +70,6 @@ export const ShiftScreen = () => {
     losses,
     dailyBusinessMetrics,
     handoffItems,
-    completeStage,
     revenueGoals,
     startTimeEntry,
     endCurrentTimeEntry,
@@ -111,7 +84,6 @@ export const ShiftScreen = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
   const loginEmployees = useAppStore(getLoginEmployees);
-  const [showPhotos, setShowPhotos] = useState(false);
   const [showEarlyStartModal, setShowEarlyStartModal] = useState(false);
   const [earlyReason, setEarlyReason] = useState('');
   const [shortShiftPrompt, setShortShiftPrompt] = useState(false);
@@ -489,7 +461,7 @@ export const ShiftScreen = () => {
 
       {roleChecklist ? (
         <div>
-          <SectionTitle title="Задачи" />
+          <SectionTitle title="Этапы смены" />
           <div className="space-y-3">
             <Card>
               <div className="flex items-start justify-between gap-3">
@@ -501,7 +473,7 @@ export const ShiftScreen = () => {
               </div>
             </Card>
 
-            <Card className="space-y-3">
+            <Card>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-ink">Чек-лист закрытия смены</p>
@@ -509,96 +481,7 @@ export const ShiftScreen = () => {
                 </div>
                 <Pill>{completedCount}/{stages.length}</Pill>
               </div>
-
-              <div className="space-y-3">
-                {stages.map((stage) => {
-                  const meta = stageMeta[stage.key];
-                  const statusIcon = stage.done ? '✅' : stage.key === 'losses' ? '🟡' : '⬜';
-
-                  return (
-                    <div
-                      key={stage.key}
-                      className="rounded-2xl bg-fog px-3 py-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{statusIcon}</span>
-                            <p className="font-semibold text-ink">{meta.title}</p>
-                          </div>
-                          <p className="mt-1 text-sm text-ink/60">{meta.description}</p>
-                        </div>
-                        <div className="flex shrink-0 gap-2">
-                          {meta.href ? (
-                            <Link
-                              to={meta.href}
-                              className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold"
-                            >
-                              Открыть
-                            </Link>
-                          ) : null}
-                          {stage.key === 'leftovers' ? (
-                            <button
-                              className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                              onClick={() => completeStage('leftovers')}
-                            >
-                              Готово
-                            </button>
-                          ) : null}
-                          {stage.key === 'closingPhotos' ? (
-                            <button
-                              className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                              onClick={() => setShowPhotos(true)}
-                            >
-                              Фото
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </Card>
-          </div>
-        </div>
-      ) : null}
-
-      {showPhotos ? (
-        <div className="fixed inset-0 z-20 flex items-end bg-black/30">
-          <div className="w-full rounded-t-[2rem] bg-white p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Фото закрытия</h3>
-              <Pill tone="warning">MVP</Pill>
-            </div>
-            <p className="text-sm text-ink/65">
-              В этом этапе пока храним только инструкцию и ручное подтверждение без загрузки
-              файлов.
-            </p>
-            <a
-              href={appLinks.closePhotoGuideUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 block rounded-2xl bg-fog px-4 py-3 text-sm font-semibold"
-            >
-              Открыть чеклист фото
-            </a>
-            <div className="mt-4 flex gap-3">
-              <PrimaryButton
-                onClick={() => {
-                  completeStage('closingPhotos');
-                  setShowPhotos(false);
-                }}
-              >
-                Подтвердить
-              </PrimaryButton>
-              <button
-                className="rounded-2xl border border-ink/10 px-4 py-3 text-sm font-semibold"
-                onClick={() => setShowPhotos(false)}
-              >
-                Позже
-              </button>
-            </div>
           </div>
         </div>
       ) : null}
