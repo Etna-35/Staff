@@ -11,7 +11,8 @@ import type {
   TeamDepartment,
 } from '../types/domain';
 
-export const goalDepartments: Department[] = ['waiters', 'bar', 'kitchen', 'hookah', 'other'];
+export const goalDepartments: Department[] = ['waiters', 'bar', 'kitchen', 'other'];
+const goalTaskRoles = ['waiter', 'bartender', 'chef', 'owner'] as const;
 
 export const createEmptyGoalContributions = (
   lastUpdatedAt: string | null = null,
@@ -33,7 +34,6 @@ export const getGoalDepartmentLabel = (department: Department) => {
     waiters: 'Официанты',
     bar: 'Бар',
     kitchen: 'Кухня',
-    hookah: 'Кальян',
     other: 'Общее',
   };
 
@@ -252,6 +252,22 @@ export const getGoalTaskProgressLabel = (task: GoalTask) => {
 
 export const getGoalVisibleTasksByScope = (tasks: GoalTask[], scope: GoalTaskScope) =>
   tasks.filter((task) => task.scope === scope);
+
+export const sanitizeGoalTasks = (tasks: GoalTask[] | null | undefined): GoalTask[] =>
+  (tasks ?? []).filter((task) => {
+    const department = (task as { department?: string }).department;
+
+    if (!goalDepartments.includes(department as Department)) {
+      return false;
+    }
+
+    if (task.scope !== 'role') {
+      return true;
+    }
+
+    const role = (task as { role?: string }).role;
+    return goalTaskRoles.includes(role as (typeof goalTaskRoles)[number]);
+  });
 
 export const createGoalPeriod = (
   periodType: GoalPeriodType,

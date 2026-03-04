@@ -6,6 +6,7 @@ import {
   applyGoalTaskProgress,
   createEmptyGoalContributions,
   normalizeGoalContributions,
+  sanitizeGoalTasks,
 } from '../lib/goals';
 import { isValidPinFormat } from '../lib/pinAuth';
 import {
@@ -50,14 +51,14 @@ import type {
 type RequestInput = {
   category: RequestCategory;
   item: string;
-  remaining: string;
-  needed: string;
+  remainingValue?: number | null;
+  neededValue?: number | null;
+  unit?: string | null;
   comment: string;
   requestMode?: 'manual' | 'catalog';
-  quantity?: number;
-  unit?: string;
-  weeklyNorm?: number;
-  step?: number;
+  quantity?: number | null;
+  weeklyNorm?: number | null;
+  step?: number | null;
   subgroup?: string;
 };
 
@@ -114,6 +115,17 @@ type DailyBusinessMetricInput = {
   revenueActual: number | null;
   averageCheckTarget: number | null;
   averageCheckActual: number | null;
+};
+
+type GoalTaskDraft = {
+  title: string;
+  description?: string;
+  department: Department;
+  points: number;
+  targetCount?: number;
+  scope: GoalTask['scope'];
+  role?: EmployeeRole;
+  employeeId?: string;
 };
 
 type ShiftReflectionInput = {
@@ -189,9 +201,10 @@ type Store = AppState & {
   loadGoals: () => Promise<void>;
   completeTask: (taskId: string, delta?: number) => Promise<ActionResult>;
   setGoalPeriod: (input: GoalSettingsInput) => Promise<ActionResult>;
+  createGoalTask: (input: GoalTaskDraft) => Promise<ActionResult>;
+  deleteGoalTask: (taskId: string) => Promise<ActionResult>;
   saveRevenueGoals: (input: RevenueGoalsInput) => ActionResult;
   saveDailyBusinessMetric: (input: DailyBusinessMetricInput) => ActionResult;
-  resetDemo: () => void;
 };
 
 type PersistedStoreSlice = Pick<
@@ -257,7 +270,7 @@ const normalizeState = (state: AppState): AppState => ({
   goals: {
     activePeriod: state.goals?.activePeriod ?? null,
     metric: state.goals?.metric ?? null,
-    tasks: state.goals?.tasks ?? [],
+    tasks: sanitizeGoalTasks(state.goals?.tasks),
     contributions: normalizeGoalContributions(
       state.goals?.contributions ?? createEmptyGoalContributions(),
     ),
@@ -374,7 +387,7 @@ const mergeGoalsState = ({
 }) => ({
   activePeriod: activePeriod ?? null,
   metric: metric ?? null,
-  tasks: tasks ?? [],
+  tasks: sanitizeGoalTasks(tasks),
   contributions: normalizeGoalContributions(
     contributions ?? createEmptyGoalContributions(),
   ),
@@ -1403,7 +1416,10 @@ export const useAppStore = create<Store>()(
         set({ goalsLoading: true, goalsError: null });
 
         try {
-          const payload = await apiClient.getGoalsActive(token, () => get().logout());
+          const payload =
+            currentEmployee.role === 'owner'
+              ? await apiClient.getGoalsAdmin(token, () => get().logout())
+              : await apiClient.getGoalsActive(token, () => get().logout());
 
           set({
             authError: null,
@@ -1573,6 +1589,121 @@ export const useAppStore = create<Store>()(
           };
         }
       },
+      createGoalTask: async (input) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        if (!input.title.trim()) {
+          return {
+            ok: false,
+            reason: 'Укажите название задачи',
+          };
+        }
+
+        if (!(input.points > 0)) {
+          return {
+            ok: false,
+            reason: 'Укажите очки больше нуля',
+          };
+        }
+
+        if (input.scope === 'role' && !input.role) {
+          return {
+            ok: false,
+            reason: 'Для ролевой задачи нужна должность',
+          };
+        }
+
+        if (input.scope === 'personal' && !input.employeeId) {
+          return {
+            ok: false,
+            reason: 'Для персональной задачи нужен сотрудник',
+          };
+        }
+
+        try {
+          const payload = await apiClient.createGoalTask(
+            token,
+            {
+              ...input,
+              title: input.title.trim(),
+              description: input.description?.trim() || undefined,
+            },
+            () => get().logout(),
+          );
+
+          set({
+            authError: null,
+            goalsSyncDisabled: false,
+            goalsError: null,
+            goals: mergeGoalsState({
+              activePeriod: payload.activePeriod,
+              metric: payload.metric,
+              tasks: payload.tasks,
+              contributions: payload.contributions,
+              viewerEmployeeId: currentEmployee.id,
+            }),
+          });
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось создать demo-задачу',
+          };
+        }
+      },
+      deleteGoalTask: async (taskId) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        if (!taskId) {
+          return {
+            ok: false,
+            reason: 'Не удалось определить задачу',
+          };
+        }
+
+        try {
+          const payload = await apiClient.deleteGoalTask(token, taskId, () => get().logout());
+
+          set({
+            authError: null,
+            goalsSyncDisabled: false,
+            goalsError: null,
+            goals: mergeGoalsState({
+              activePeriod: payload.activePeriod,
+              metric: payload.metric,
+              tasks: payload.tasks,
+              contributions: payload.contributions,
+              viewerEmployeeId: currentEmployee.id,
+            }),
+          });
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось удалить demo-задачу',
+          };
+        }
+      },
       saveRevenueGoals: (input) => {
         const currentEmployee = getCurrentEmployee(get());
 
@@ -1650,21 +1781,6 @@ export const useAppStore = create<Store>()(
 
         return { ok: true };
       },
-      resetDemo: () =>
-        set((state) => ({
-          ...normalizeState(cloneInitialState()),
-          employees: state.employees,
-          loginEmployees: state.loginEmployees,
-          session: state.session,
-          employeesLoading: false,
-          loginEmployeesLoading: false,
-          shiftReflectionsLoading: false,
-          specialStarAwardsLoading: false,
-          bonusAwardsLoading: false,
-          goalsLoading: false,
-          goalsSyncDisabled: false,
-          goalsError: null,
-        })),
     }),
     {
       name: storageKey,

@@ -1,5 +1,5 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
-import { OwnerGoalsRoute } from './components/OwnerGoalsRoute';
+import { GoalsRoute } from './components/GoalsRoute';
 import { ProtectedRoot } from './components/ProtectedRoot';
 import { EmployeesScreen } from './screens/EmployeesScreen';
 import { HandoffScreen } from './screens/HandoffScreen';
@@ -21,7 +21,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'goals',
-        element: <OwnerGoalsRoute />,
+        element: <GoalsRoute />,
       },
       {
         path: 'missions',

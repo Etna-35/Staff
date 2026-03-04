@@ -33,13 +33,13 @@ export type GoalMetricType =
   | 'standards'
   | 'custom';
 
-export type Department = 'waiters' | 'bar' | 'kitchen' | 'hookah' | 'other';
+export type Department = 'waiters' | 'bar' | 'kitchen' | 'other';
 
 export type GoalTaskStatus = 'todo' | 'in_progress' | 'done';
 
 export type GoalTaskScope = 'global' | 'role' | 'personal';
 
-export type GoalTaskRole = EmployeeRole | 'hookah';
+export type GoalTaskRole = EmployeeRole;
 
 export type Task = {
   id: string;
@@ -84,14 +84,14 @@ export type Request = {
   id: string;
   category: RequestCategory;
   item: string;
-  remaining: string;
-  needed: string;
+  remainingValue?: number | null;
+  neededValue?: number | null;
+  unit?: string | null;
   comment: string;
   requestMode?: RequestMode;
-  quantity?: number;
-  unit?: string;
-  weeklyNorm?: number;
-  step?: number;
+  quantity?: number | null;
+  weeklyNorm?: number | null;
+  step?: number | null;
   subgroup?: string;
   createdAt: string;
 };

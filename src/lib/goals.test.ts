@@ -1,4 +1,8 @@
-import { applyGoalTaskProgress, createEmptyGoalContributions } from './goals';
+import {
+  applyGoalTaskProgress,
+  createEmptyGoalContributions,
+  sanitizeGoalTasks,
+} from './goals';
 import type { GoalMetric, GoalTask } from '../types/domain';
 
 describe('goals helpers', () => {
@@ -71,5 +75,44 @@ describe('goals helpers', () => {
     expect(result.task?.progressCount).toBe(1);
     expect(result.task?.status).toBe('done');
     expect(result.contributions.bar.pointsEarned).toBe(3);
+  });
+
+  it('drops legacy goal tasks with unsupported departments or roles', () => {
+    const tasks = sanitizeGoalTasks([
+      {
+        id: 'legacy-hookah-role',
+        scope: 'role',
+        role: 'hookah' as never,
+        title: 'Старый кальянный таск',
+        department: 'other',
+        points: 1,
+        status: 'todo',
+        createdAt: '2026-03-01T00:00:00.000Z',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+      },
+      {
+        id: 'legacy-hookah-department',
+        scope: 'global',
+        title: 'Старый отдел',
+        department: 'hookah' as never,
+        points: 1,
+        status: 'todo',
+        createdAt: '2026-03-01T00:00:00.000Z',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+      },
+      {
+        id: 'valid-task',
+        scope: 'global',
+        title: 'Актуальная задача',
+        department: 'bar',
+        points: 2,
+        status: 'todo',
+        createdAt: '2026-03-01T00:00:00.000Z',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+      },
+    ]);
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.id).toBe('valid-task');
   });
 });

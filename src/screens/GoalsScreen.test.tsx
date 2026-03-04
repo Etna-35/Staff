@@ -9,15 +9,22 @@ type GoalsStoreMockState = {
   goalsLoading: boolean;
   goalsError: string | null;
   goalsSyncDisabled: boolean;
+  loginEmployees: Array<{ id: string; fullName: string; positionTitle: string }>;
   loadGoals: ReturnType<typeof vi.fn>;
   completeTask: ReturnType<typeof vi.fn>;
   setGoalPeriod: ReturnType<typeof vi.fn>;
+  createGoalTask: ReturnType<typeof vi.fn>;
+  deleteGoalTask: ReturnType<typeof vi.fn>;
+  refreshLoginEmployees: ReturnType<typeof vi.fn>;
 };
 
 const storeBridge = vi.hoisted(() => {
   const loadGoalsMock = vi.fn().mockResolvedValue(undefined);
   const completeTaskMock = vi.fn().mockResolvedValue({ ok: true });
   const setGoalPeriodMock = vi.fn().mockResolvedValue({ ok: true });
+  const createGoalTaskMock = vi.fn().mockResolvedValue({ ok: true });
+  const deleteGoalTaskMock = vi.fn().mockResolvedValue({ ok: true });
+  const refreshLoginEmployeesMock = vi.fn().mockResolvedValue(undefined);
   const defaultEmployee: Employee = {
     id: 'emp-masha',
     fullName: 'Маша',
@@ -38,7 +45,6 @@ const storeBridge = vi.hoisted(() => {
       waiters: { department: 'waiters', pointsEarned: 0, percent: 0, lastUpdatedAt: null },
       bar: { department: 'bar', pointsEarned: 0, percent: 0, lastUpdatedAt: null },
       kitchen: { department: 'kitchen', pointsEarned: 0, percent: 0, lastUpdatedAt: null },
-      hookah: { department: 'hookah', pointsEarned: 0, percent: 0, lastUpdatedAt: null },
       other: { department: 'other', pointsEarned: 0, percent: 0, lastUpdatedAt: null },
     },
     viewerEmployeeId: 'emp-masha',
@@ -48,6 +54,9 @@ const storeBridge = vi.hoisted(() => {
     loadGoalsMock,
     completeTaskMock,
     setGoalPeriodMock,
+    createGoalTaskMock,
+    deleteGoalTaskMock,
+    refreshLoginEmployeesMock,
     mockStoreState: {
       session: {
         bootstrapped: true,
@@ -58,9 +67,13 @@ const storeBridge = vi.hoisted(() => {
       goalsLoading: false,
       goalsError: null as string | null,
       goalsSyncDisabled: false,
+      loginEmployees: [],
       loadGoals: loadGoalsMock,
       completeTask: completeTaskMock,
       setGoalPeriod: setGoalPeriodMock,
+      createGoalTask: createGoalTaskMock,
+      deleteGoalTask: deleteGoalTaskMock,
+      refreshLoginEmployees: refreshLoginEmployeesMock,
     } as GoalsStoreMockState,
   };
 });
@@ -97,13 +110,20 @@ describe('GoalsScreen', () => {
       goalsLoading: false,
       goalsError: null,
       goalsSyncDisabled: false,
+      loginEmployees: [],
       loadGoals: storeBridge.loadGoalsMock,
       completeTask: storeBridge.completeTaskMock,
       setGoalPeriod: storeBridge.setGoalPeriodMock,
+      createGoalTask: storeBridge.createGoalTaskMock,
+      deleteGoalTask: storeBridge.deleteGoalTaskMock,
+      refreshLoginEmployees: storeBridge.refreshLoginEmployeesMock,
     };
     storeBridge.loadGoalsMock.mockClear();
     storeBridge.completeTaskMock.mockClear();
     storeBridge.setGoalPeriodMock.mockClear();
+    storeBridge.createGoalTaskMock.mockClear();
+    storeBridge.deleteGoalTaskMock.mockClear();
+    storeBridge.refreshLoginEmployeesMock.mockClear();
   };
 
   it('renders loading state with existing goal shell', () => {

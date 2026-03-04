@@ -10,10 +10,10 @@ export type GoalMetricType =
   | 'returning'
   | 'standards'
   | 'custom';
-export type Department = 'waiters' | 'bar' | 'kitchen' | 'hookah' | 'other';
+export type Department = 'waiters' | 'bar' | 'kitchen' | 'other';
 export type GoalTaskScope = 'global' | 'role' | 'personal';
 export type GoalTaskStatus = 'todo' | 'in_progress' | 'done';
-export type GoalTaskRole = Role | 'hookah';
+export type GoalTaskRole = Role;
 
 export type GoalPeriod = {
   id: string;
@@ -79,7 +79,8 @@ export type GoalProgressMap = Record<
   }
 >;
 
-export const goalDepartments: Department[] = ['waiters', 'bar', 'kitchen', 'hookah', 'other'];
+export const goalDepartments: Department[] = ['waiters', 'bar', 'kitchen', 'other'];
+const goalTaskRoles = ['waiter', 'bartender', 'chef', 'owner'] as const;
 
 export const createEmptyGoalContributions = (
   lastUpdatedAt: string | null = null,
@@ -191,10 +192,6 @@ export const getDepartmentForRole = (role: GoalTaskRole): Department => {
     return 'kitchen';
   }
 
-  if (role === 'hookah') {
-    return 'hookah';
-  }
-
   return 'other';
 };
 
@@ -290,20 +287,6 @@ export const createDefaultGoalTasks = (nowIso: string): GoalTask[] => [
     targetCount: 3,
     progressCount: 1,
     status: 'in_progress',
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  },
-  {
-    id: 'goal-role-hookah-special',
-    scope: 'role',
-    role: 'hookah',
-    title: 'Авторский кальян',
-    description: 'Спец-задача для кальянного направления.',
-    department: 'hookah',
-    points: 3,
-    targetCount: 3,
-    progressCount: 0,
-    status: 'todo',
     createdAt: nowIso,
     updatedAt: nowIso,
   },
@@ -412,6 +395,22 @@ export const getVisibleGoalTasks = (
   });
 
 const clampDelta = (delta: number) => Math.max(1, Math.min(Math.trunc(delta || 1), 10));
+
+export const sanitizeGoalTasks = (tasks: GoalTask[] | null | undefined): GoalTask[] =>
+  (tasks ?? []).filter((task) => {
+    const department = (task as { department?: string }).department;
+
+    if (!goalDepartments.includes(department as Department)) {
+      return false;
+    }
+
+    if (task.scope !== 'role') {
+      return true;
+    }
+
+    const role = (task as { role?: string }).role;
+    return goalTaskRoles.includes(role as (typeof goalTaskRoles)[number]);
+  });
 
 export const applyTaskProgress = (
   task: GoalTask,

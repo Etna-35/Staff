@@ -1,9 +1,9 @@
 import { Navigate } from 'react-router-dom';
 import { canAccessGoals } from '../lib/goalsAccess';
-import { getCurrentEmployee, useAppStore } from '../store/useAppStore';
 import { GoalsScreen } from '../screens/GoalsScreen';
+import { getCurrentEmployee, useAppStore } from '../store/useAppStore';
 
-export const OwnerGoalsRoute = () => {
+export const GoalsRoute = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
 
   if (!canAccessGoals(currentEmployee)) {

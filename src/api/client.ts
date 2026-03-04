@@ -88,6 +88,17 @@ type GoalTaskProgressResponse = {
   contributions: Record<Department, GoalContribution>;
 };
 
+type GoalTaskMutationInput = {
+  title: string;
+  description?: string;
+  department: Department;
+  points: number;
+  targetCount?: number;
+  scope: GoalTask['scope'];
+  role?: EmployeeRole;
+  employeeId?: string;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -352,6 +363,11 @@ export const apiClient = {
       token,
       onUnauthorized,
     }),
+  getGoalsAdmin: (token: string, onUnauthorized?: () => void) =>
+    request<GoalsActiveResponse>('/api/goals/tasks', {
+      token,
+      onUnauthorized,
+    }),
   progressGoalTask: (
     token: string,
     taskId: string,
@@ -380,6 +396,23 @@ export const apiClient = {
       method: 'POST',
       token,
       body: input,
+      onUnauthorized,
+    }),
+  createGoalTask: (
+    token: string,
+    input: GoalTaskMutationInput,
+    onUnauthorized?: () => void,
+  ) =>
+    request<GoalsActiveResponse>('/api/goals/tasks', {
+      method: 'POST',
+      token,
+      body: input,
+      onUnauthorized,
+    }),
+  deleteGoalTask: (token: string, taskId: string, onUnauthorized?: () => void) =>
+    request<GoalsActiveResponse>(`/api/goals/tasks/${taskId}`, {
+      method: 'DELETE',
+      token,
       onUnauthorized,
     }),
 };

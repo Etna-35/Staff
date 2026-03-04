@@ -155,4 +155,153 @@ describe('worker goals endpoints', () => {
     expect(progressPayload.metric.currentValue).toBeGreaterThan(0);
     expect(progressPayload.contributions.waiters.pointsEarned).toBeGreaterThanOrEqual(beforePoints);
   });
+
+  it('allows owner to create and delete demo goal tasks', async () => {
+    const env = createEnv();
+    const bootstrapResponse = await worker.fetch(
+      apiRequest('/api/bootstrap', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fullName: 'Юра', pin: '1234' }),
+      }),
+      env as never,
+    );
+    const bootstrapPayload = await bootstrapResponse.json();
+    const ownerToken = bootstrapPayload.sessionToken as string;
+
+    const createResponse = await worker.fetch(
+      apiRequest('/api/goals/tasks', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${ownerToken}`,
+        },
+        body: JSON.stringify({
+          title: 'Demo задача на отзывы',
+          scope: 'global',
+          department: 'waiters',
+          points: 3,
+          targetCount: 2,
+        }),
+      }),
+      env as never,
+    );
+    const createPayload = await createResponse.json();
+    const createdTask = createPayload.tasks.find((task: Record<string, unknown>) =>
+      String(task.id).startsWith('goal-demo-'),
+    );
+
+    expect(createResponse.status).toBe(201);
+    expect(createdTask?.title).toBe('Demo задача на отзывы');
+
+    const adminResponse = await worker.fetch(
+      apiRequest('/api/goals/tasks', {
+        headers: { authorization: `Bearer ${ownerToken}` },
+      }),
+      env as never,
+    );
+    const adminPayload = await adminResponse.json();
+
+    expect(adminPayload.tasks.some((task: Record<string, unknown>) => task.id === createdTask.id)).toBe(
+      true,
+    );
+
+    const deleteResponse = await worker.fetch(
+      apiRequest(`/api/goals/tasks/${createdTask.id}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${ownerToken}` },
+      }),
+      env as never,
+    );
+    const deletePayload = await deleteResponse.json();
+
+    expect(deleteResponse.status).toBe(200);
+    expect(deletePayload.tasks.some((task: Record<string, unknown>) => task.id === createdTask.id)).toBe(
+      false,
+    );
+  });
+
+  it('sanitizes legacy hookah goal tasks from KV before returning admin payload', async () => {
+    const env = createEnv();
+    const bootstrapResponse = await worker.fetch(
+      apiRequest('/api/bootstrap', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fullName: 'Юра', pin: '1234' }),
+      }),
+      env as never,
+    );
+    const bootstrapPayload = await bootstrapResponse.json();
+    const ownerToken = bootstrapPayload.sessionToken as string;
+
+    await worker.fetch(
+      apiRequest('/api/goals/active', {
+        headers: { authorization: `Bearer ${ownerToken}` },
+      }),
+      env as never,
+    );
+
+    await env.STAFF_KV.put(
+      'goals:tasks',
+      JSON.stringify([
+        {
+          id: 'legacy-hookah-role',
+          scope: 'role',
+          role: 'hookah',
+          title: 'Старый кальянный таск',
+          department: 'other',
+          points: 1,
+          status: 'todo',
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+        {
+          id: 'legacy-hookah-department',
+          scope: 'global',
+          title: 'Старый отдел',
+          department: 'hookah',
+          points: 1,
+          status: 'todo',
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+        {
+          id: 'valid-bar-task',
+          scope: 'global',
+          title: 'Актуальная задача',
+          department: 'bar',
+          points: 2,
+          status: 'todo',
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ]),
+    );
+
+    const adminResponse = await worker.fetch(
+      apiRequest('/api/goals/tasks', {
+        headers: { authorization: `Bearer ${ownerToken}` },
+      }),
+      env as never,
+    );
+    const adminPayload = await adminResponse.json();
+
+    expect(adminResponse.status).toBe(200);
+    expect(
+      adminPayload.tasks.some((task: Record<string, unknown>) => task.id === 'legacy-hookah-role'),
+    ).toBe(false);
+    expect(
+      adminPayload.tasks.some((task: Record<string, unknown>) => task.id === 'legacy-hookah-department'),
+    ).toBe(false);
+    expect(
+      adminPayload.tasks.some((task: Record<string, unknown>) => task.id === 'valid-bar-task'),
+    ).toBe(true);
+
+    const persistedTasks = JSON.parse((await env.STAFF_KV.get('goals:tasks')) ?? '[]') as Array<{
+      id: string;
+    }>;
+    expect(persistedTasks.some((task) => task.id === 'legacy-hookah-role')).toBe(false);
+    expect(persistedTasks.some((task) => task.id === 'legacy-hookah-department')).toBe(false);
+    expect(persistedTasks.some((task) => task.id === 'valid-bar-task')).toBe(true);
+  });
 });

@@ -22,6 +22,7 @@ import {
   normalizeGoalContributions,
   Role,
   mergeGoalTasksWithProgress,
+  sanitizeGoalTasks,
 } from "./goals";
 
 type Employee = {
@@ -478,7 +479,14 @@ async function getGoalTasks(env: Env): Promise<GoalTask[]> {
   if (!raw) return [];
 
   try {
-    return JSON.parse(raw) as GoalTask[];
+    const parsed = JSON.parse(raw) as GoalTask[];
+    const tasks = sanitizeGoalTasks(parsed);
+
+    if (tasks.length !== parsed.length) {
+      await putGoalTasks(env, tasks);
+    }
+
+    return tasks;
   } catch {
     return [];
   }
@@ -594,27 +602,78 @@ async function ensureGoalsData(
     }
   }
 
-  const progressMap = await getGoalProgressMap(env, active.period.id);
-  const contributions = await getGoalContributions(env, active.period.id);
-  const mergedTasks = mergeGoalTasksWithProgress(tasks, progressMap);
-  const nextMetric = {
-    ...active.metric,
-    currentValue: getMetricCurrentValue(contributions),
-  };
+  const storedProgressMap = await getGoalProgressMap(env, active.period.id);
+  const storedContributions = await getGoalContributions(env, active.period.id);
+  const nextGoals = rebuildGoalsSnapshot(tasks, storedProgressMap, active.metric);
+  const progressChanged =
+    JSON.stringify(nextGoals.progressMap) !== JSON.stringify(storedProgressMap);
+  const contributionsChanged =
+    JSON.stringify(nextGoals.contributions) !== JSON.stringify(storedContributions);
+  const metricChanged = nextGoals.metric.currentValue !== active.metric.currentValue;
 
-  if (nextMetric.currentValue !== active.metric.currentValue) {
+  if (progressChanged) {
+    await putGoalProgressMap(env, active.period.id, nextGoals.progressMap);
+  }
+
+  if (contributionsChanged) {
+    await putGoalContributions(env, active.period.id, nextGoals.contributions);
+  }
+
+  if (metricChanged) {
     active = {
       period: active.period,
-      metric: nextMetric,
+      metric: nextGoals.metric,
     };
     await putGoalsActive(env, active);
   }
 
   return {
     activePeriod: active.period,
-    metric: nextMetric,
+    metric: active.metric,
+    tasks: nextGoals.tasks,
+    contributions: nextGoals.contributions,
+  };
+}
+
+function isDemoGoalTaskId(taskId: string) {
+  return taskId.startsWith("goal-demo-");
+}
+
+function syncGoalProgressMapWithTasks(
+  tasks: GoalTask[],
+  progressMap: GoalProgressMap,
+): GoalProgressMap {
+  return tasks.reduce<GoalProgressMap>((result, task) => {
+    const existing = progressMap[task.id];
+    result[task.id] = existing
+      ? existing
+      : {
+          progressCount: task.progressCount ?? 0,
+          status: task.status,
+          updatedAt: task.updatedAt,
+          completedAt: task.completedAt,
+        };
+    return result;
+  }, {});
+}
+
+function rebuildGoalsSnapshot(
+  tasks: GoalTask[],
+  progressMap: GoalProgressMap,
+  metric: GoalMetric,
+) {
+  const nextProgressMap = syncGoalProgressMapWithTasks(tasks, progressMap);
+  const mergedTasks = mergeGoalTasksWithProgress(tasks, nextProgressMap);
+  const contributions = buildContributionsFromTasks(mergedTasks);
+
+  return {
+    progressMap: nextProgressMap,
     tasks: mergedTasks,
     contributions,
+    metric: {
+      ...metric,
+      currentValue: getMetricCurrentValue(contributions),
+    },
   };
 }
 
@@ -1016,6 +1075,152 @@ export default {
       );
     }
 
+    if (request.method === "GET" && path === "/api/goals/tasks") {
+      if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
+
+      const goals = await ensureGoalsData(env, {
+        id: session.employeeId,
+        role: session.role,
+      });
+
+      return withCors(
+        request,
+        env,
+        json({
+          ok: true,
+          activePeriod: goals.activePeriod,
+          metric: goals.metric,
+          tasks: goals.tasks,
+          contributions: goals.contributions,
+        }),
+      );
+    }
+
+    if (request.method === "POST" && path === "/api/goals/tasks") {
+      if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
+
+      const body = await readJson<{
+        title?: string;
+        description?: string;
+        department?: Department;
+        points?: number;
+        targetCount?: number;
+        scope?: GoalTask["scope"];
+        role?: Role;
+        employeeId?: string;
+      }>(request);
+
+      if (!body) return withCors(request, env, badRequest("Expected JSON body"));
+
+      const title = (body.title || "").trim();
+      const description = typeof body.description === "string" ? body.description.trim() || undefined : undefined;
+      const scope = body.scope;
+      const points = typeof body.points === "number" ? Math.max(1, Math.trunc(body.points)) : 0;
+      const targetCount =
+        typeof body.targetCount === "number" && body.targetCount > 1
+          ? Math.min(Math.trunc(body.targetCount), 99)
+          : 1;
+      const department: Department =
+        body.department && ["waiters", "bar", "kitchen", "other"].includes(body.department)
+          ? body.department
+          : "other";
+
+      if (!title) return withCors(request, env, badRequest("title is required"));
+      if (!scope || !["global", "role", "personal"].includes(scope)) {
+        return withCors(request, env, badRequest("scope must be global, role or personal"));
+      }
+      if (!(points > 0)) return withCors(request, env, badRequest("points must be greater than 0"));
+
+      if (scope === "role" && !body.role) {
+        return withCors(request, env, badRequest("role is required for role task"));
+      }
+
+      if (scope === "personal") {
+        const employeeId = (body.employeeId || "").trim();
+        if (!employeeId) {
+          return withCors(request, env, badRequest("employeeId is required for personal task"));
+        }
+        const employee = await getEmployee(env, employeeId);
+        if (!employee || !employee.isActive) {
+          return withCors(request, env, badRequest("Employee not found"));
+        }
+      }
+
+      const goals = await ensureGoalsData(env, {
+        id: session.employeeId,
+        role: session.role,
+      });
+      const nowIso = new Date().toISOString();
+      const nextTask: GoalTask =
+        scope === "role"
+          ? {
+              id: `goal-demo-${randomId()}`,
+              scope,
+              title,
+              description,
+              department,
+              points,
+              targetCount,
+              progressCount: 0,
+              status: "todo",
+              createdAt: nowIso,
+              updatedAt: nowIso,
+              role: body.role as Role,
+            }
+          : scope === "personal"
+            ? {
+                id: `goal-demo-${randomId()}`,
+                scope,
+                title,
+                description,
+                department,
+                points,
+                targetCount,
+                progressCount: 0,
+                status: "todo",
+                createdAt: nowIso,
+                updatedAt: nowIso,
+                employeeId: (body.employeeId || "").trim(),
+              }
+            : {
+                id: `goal-demo-${randomId()}`,
+                scope,
+                title,
+                description,
+                department,
+                points,
+                targetCount,
+                progressCount: 0,
+                status: "todo",
+                createdAt: nowIso,
+                updatedAt: nowIso,
+              };
+
+      const tasks = [...(await getGoalTasks(env)), nextTask];
+      const progressMap = await getGoalProgressMap(env, goals.activePeriod.id);
+      const nextGoals = rebuildGoalsSnapshot(tasks, progressMap, goals.metric);
+
+      await putGoalTasks(env, tasks);
+      await putGoalProgressMap(env, goals.activePeriod.id, nextGoals.progressMap);
+      await putGoalContributions(env, goals.activePeriod.id, nextGoals.contributions);
+      await putGoalsActive(env, {
+        period: goals.activePeriod,
+        metric: nextGoals.metric,
+      });
+
+      return withCors(
+        request,
+        env,
+        json({
+          ok: true,
+          activePeriod: goals.activePeriod,
+          metric: nextGoals.metric,
+          tasks: nextGoals.tasks,
+          contributions: nextGoals.contributions,
+        }, { status: 201 }),
+      );
+    }
+
     const goalTaskProgressMatch = path.match(/^\/api\/goals\/task\/([^/]+)\/progress$/);
 
     if (goalTaskProgressMatch && request.method === "POST") {
@@ -1129,10 +1334,7 @@ export default {
       await putGoalProgressMap(env, period.id, progressMap);
       await putGoalContributions(env, period.id, contributions);
 
-      const visibleTasks = getVisibleGoalTasks(mergeGoalTasksWithProgress(tasks, progressMap), {
-        employeeId: session.employeeId,
-        role: session.role,
-      });
+      const allTasks = mergeGoalTasksWithProgress(tasks, progressMap);
 
       return withCors(
         request,
@@ -1141,8 +1343,54 @@ export default {
           ok: true,
           activePeriod: period,
           metric,
-          tasks: visibleTasks,
+          tasks: allTasks,
           contributions,
+        }),
+      );
+    }
+
+    const goalTaskDeleteMatch = path.match(/^\/api\/goals\/tasks\/([^/]+)$/);
+
+    if (goalTaskDeleteMatch && request.method === "DELETE") {
+      if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
+
+      const taskId = goalTaskDeleteMatch[1];
+      const tasks = await getGoalTasks(env);
+      const existingTask = tasks.find((task) => task.id === taskId);
+
+      if (!existingTask) {
+        return withCors(request, env, notFound("Goal task not found"));
+      }
+
+      if (!isDemoGoalTaskId(taskId)) {
+        return withCors(request, env, badRequest("Можно удалять только demo-задачи"));
+      }
+
+      const goals = await ensureGoalsData(env, {
+        id: session.employeeId,
+        role: session.role,
+      });
+      const nextTasks = tasks.filter((task) => task.id !== taskId);
+      const progressMap = await getGoalProgressMap(env, goals.activePeriod.id);
+      const nextGoals = rebuildGoalsSnapshot(nextTasks, progressMap, goals.metric);
+
+      await putGoalTasks(env, nextTasks);
+      await putGoalProgressMap(env, goals.activePeriod.id, nextGoals.progressMap);
+      await putGoalContributions(env, goals.activePeriod.id, nextGoals.contributions);
+      await putGoalsActive(env, {
+        period: goals.activePeriod,
+        metric: nextGoals.metric,
+      });
+
+      return withCors(
+        request,
+        env,
+        json({
+          ok: true,
+          activePeriod: goals.activePeriod,
+          metric: nextGoals.metric,
+          tasks: nextGoals.tasks,
+          contributions: nextGoals.contributions,
         }),
       );
     }
