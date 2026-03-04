@@ -76,12 +76,20 @@ export const getGoalCurrentValueLabel = (metric: GoalMetric | null) => {
     return '0';
   }
 
+  if (!metric.unit || metric.unit === 'pts') {
+    return metric.currentValue.toLocaleString('ru-RU');
+  }
+
   return `${metric.currentValue.toLocaleString('ru-RU')} ${metric.unit}`;
 };
 
 export const getGoalTargetValueLabel = (metric: GoalMetric | null) => {
   if (!metric) {
     return '0';
+  }
+
+  if (!metric.unit || metric.unit === 'pts') {
+    return metric.targetValue.toLocaleString('ru-RU');
   }
 
   return `${metric.targetValue.toLocaleString('ru-RU')} ${metric.unit}`;

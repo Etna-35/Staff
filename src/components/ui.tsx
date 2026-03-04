@@ -8,6 +8,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
+import { getCurrentEmployee, useAppStore } from '../store/useAppStore';
 
 export const Screen = ({ children }: PropsWithChildren) => (
   <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-28 pt-4 safe-pt">
@@ -181,10 +182,19 @@ const navItems = [
   { to: '/profile', label: 'Я' },
 ];
 
-export const BottomBar = () => (
-  <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md px-4 pb-4 safe-pb">
-    <nav className="grid grid-cols-5 rounded-[1.75rem] border border-white/60 bg-white/90 p-2 shadow-card backdrop-blur">
-      {navItems.map((item) => (
+export const BottomBar = () => {
+  const currentEmployee = useAppStore(getCurrentEmployee);
+  const visibleNavItems = currentEmployee?.role === 'owner' ? navItems : navItems.filter((item) => item.to !== '/goals');
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md px-4 pb-4 safe-pb">
+      <nav
+        className={clsx(
+          'grid rounded-[1.75rem] border border-white/60 bg-white/90 p-2 shadow-card backdrop-blur',
+          visibleNavItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4',
+        )}
+      >
+        {visibleNavItems.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
@@ -197,10 +207,11 @@ export const BottomBar = () => (
         >
           {item.label}
         </NavLink>
-      ))}
-    </nav>
-  </div>
-);
+        ))}
+      </nav>
+    </div>
+  );
+};
 
 export const InlineLink = ({ to, children }: { to: string; children: ReactNode }) => (
   <Link className="text-sm font-semibold text-clay" to={to}>
