@@ -185,7 +185,7 @@ const navItems = [
 
 export const BottomBar = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
-  const visibleNavItems = canAccessGoals(currentEmployee?.role)
+  const visibleNavItems = canAccessGoals(currentEmployee)
     ? navItems
     : navItems.filter((item) => item.to !== '/goals');
 

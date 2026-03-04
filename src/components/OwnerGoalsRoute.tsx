@@ -6,7 +6,7 @@ import { GoalsScreen } from '../screens/GoalsScreen';
 export const OwnerGoalsRoute = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
 
-  if (!canAccessGoals(currentEmployee?.role)) {
+  if (!canAccessGoals(currentEmployee)) {
     return <Navigate to="/" replace />;
   }
 
