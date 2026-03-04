@@ -109,6 +109,8 @@ export const mockState: AppState = {
   revenueGoals: {
     weeklyRevenueTarget: 580000,
     monthlyRevenueTarget: 2450000,
+    monthlyAverageCheckStart: 3200,
+    monthlyAverageCheckTarget: 3600,
   },
   dailyBusinessMetrics: [
     {

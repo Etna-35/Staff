@@ -4,11 +4,9 @@ import { appLinks } from '../config/links';
 import { initTelegramApp, getTelegramDisplayName } from '../lib/telegram';
 import { durationHours, formatDuration, isBeforeShiftStart } from '../lib/timeTracking';
 import {
-  getDailyBusinessMetricForDate,
   getDailyBusinessMetricsForPeriod,
   getCurrentActiveEntry,
   getCurrentEmployee,
-  getLocalDateKey,
   getRevenueActualForPeriod,
   getVisibleStageKeys,
   useAppStore,
@@ -47,6 +45,58 @@ const stageMeta: Record<
     description: 'Пока как ссылка и подтверждение.',
   },
 } as const;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+const getMonthProgressRatio = (now = new Date()) => {
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+  if (daysInMonth <= 1) {
+    return 1;
+  }
+
+  return clamp((now.getDate() - 1) / (daysInMonth - 1), 0.08, 0.92);
+};
+
+const getTrajectoryPath = ({
+  startValue,
+  currentValue,
+  targetValue,
+  progressRatio,
+}: {
+  startValue: number;
+  currentValue: number;
+  targetValue: number;
+  progressRatio: number;
+}) => {
+  const width = 100;
+  const height = 56;
+  const paddingX = 2;
+  const paddingY = 4;
+  const minValue = Math.min(startValue, currentValue, targetValue) * 0.92;
+  const maxValue = Math.max(startValue, currentValue, targetValue) * 1.08;
+  const range = maxValue - minValue || 1;
+  const toY = (value: number) =>
+    clamp(
+      height - paddingY - ((value - minValue) / range) * (height - paddingY * 2),
+      paddingY,
+      height - paddingY,
+    );
+
+  const startX = paddingX;
+  const currentX = paddingX + (width - paddingX * 2) * progressRatio;
+  const endX = width - paddingX;
+  const startY = toY(startValue);
+  const currentY = toY(currentValue);
+  const endY = toY(targetValue);
+  const controlOneX = startX + (currentX - startX) * 0.5;
+  const controlTwoX = currentX + (endX - currentX) * 0.45;
+
+  return `M ${startX} ${startY}
+    C ${controlOneX} ${startY} ${currentX - 8} ${currentY + 2} ${currentX} ${currentY}
+    S ${controlTwoX} ${endY} ${endX} ${endY}`;
+};
 
 export const ShiftScreen = () => {
   const {
@@ -122,27 +172,24 @@ export const ShiftScreen = () => {
   const weeklyRevenueActual = getRevenueActualForPeriod(dailyBusinessMetrics, 'week');
   const monthlyRevenueActual = getRevenueActualForPeriod(dailyBusinessMetrics, 'month');
   const showRevenueValues = currentEmployee?.role === 'owner';
-  const currentWeekMetrics = getDailyBusinessMetricsForPeriod(dailyBusinessMetrics, 'week');
-  const weekAverageCheckValues = useMemo(() => {
-    const now = new Date();
-    const day = now.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() + diff);
-    monday.setHours(12, 0, 0, 0);
-
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(monday);
-      date.setDate(monday.getDate() + index);
-      const metric = getDailyBusinessMetricForDate(
-        currentWeekMetrics,
-        getLocalDateKey(date),
-      );
-
-      return metric?.averageCheckActual ?? 0;
-    });
-  }, [currentWeekMetrics]);
-  const maxAverageCheckValue = Math.max(...weekAverageCheckValues, 1);
+  const currentMonthMetrics = getDailyBusinessMetricsForPeriod(dailyBusinessMetrics, 'month');
+  const averageCheckProgressRatio = getMonthProgressRatio(new Date());
+  const actualAverageCheckValues = currentMonthMetrics
+    .map((metric) => metric.averageCheckActual)
+    .filter((value): value is number => typeof value === 'number' && value > 0);
+  const averageCheckStart = revenueGoals.monthlyAverageCheckStart ?? 3200;
+  const averageCheckTarget = revenueGoals.monthlyAverageCheckTarget ?? averageCheckStart;
+  const currentAverageCheck =
+    actualAverageCheckValues.length > 0
+      ? actualAverageCheckValues.reduce((sum, value) => sum + value, 0) /
+        actualAverageCheckValues.length
+      : averageCheckStart;
+  const averageCheckPath = getTrajectoryPath({
+    startValue: averageCheckStart,
+    currentValue: currentAverageCheck,
+    targetValue: averageCheckTarget,
+    progressRatio: averageCheckProgressRatio,
+  });
   const weeklyRevenueProgress = revenueGoals.weeklyRevenueTarget
     ? Math.min(Math.round((weeklyRevenueActual / revenueGoals.weeklyRevenueTarget) * 100), 100)
     : 0;
@@ -264,19 +311,30 @@ export const ShiftScreen = () => {
             <ProgressBar value={monthlyRevenueProgress} hideHeader />
           </div>
           <div className="rounded-2xl bg-fog p-4">
-            <p className="text-xs text-ink/50">План среднего чека за неделю</p>
-            <div className="mt-4 flex h-24 items-end gap-2">
-              {weekAverageCheckValues.map((value, index) => {
-                const heightPercent = value > 0 ? Math.max((value / maxAverageCheckValue) * 100, 18) : 12;
-
-                return (
-                  <div
-                    key={`${index}-${value}`}
-                    className="flex-1 rounded-full bg-white/70"
-                    style={{ height: `${heightPercent}%` }}
-                  />
-                );
-              })}
+            <p className="text-xs text-ink/50">План среднего чека за месяц</p>
+            <div className="relative mt-4 h-28 overflow-hidden rounded-[1.5rem] bg-[#efe9da]">
+              <div className="absolute inset-x-4 bottom-5 flex items-end gap-3 opacity-75">
+                <div className="h-16 flex-1 rounded-t-[1.6rem] bg-white/70" />
+                <div className="h-10 flex-1 rounded-t-[1.6rem] bg-white/70" />
+                <div className="h-6 flex-1 rounded-full bg-white/70" />
+                <div className="h-6 flex-1 rounded-full bg-white/70" />
+                <div className="h-6 flex-1 rounded-full bg-white/70" />
+              </div>
+              <svg
+                className="absolute inset-0 h-full w-full"
+                viewBox="0 0 100 56"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <path
+                  d={averageCheckPath}
+                  fill="none"
+                  stroke="#e65e1c"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </div>
           </div>
         </div>

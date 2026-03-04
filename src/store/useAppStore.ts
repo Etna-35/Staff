@@ -73,6 +73,8 @@ type ActionResult = {
 type RevenueGoalsInput = {
   weeklyRevenueTarget: number | null;
   monthlyRevenueTarget: number | null;
+  monthlyAverageCheckStart: number | null;
+  monthlyAverageCheckTarget: number | null;
 };
 
 type DailyBusinessMetricInput = {
@@ -151,9 +153,11 @@ const normalizeState = (state: AppState): AppState => ({
   telegramName: state.telegramName || 'Гость смены',
   employees: state.employees ?? [],
   loginEmployees: state.loginEmployees ?? [],
-  revenueGoals: state.revenueGoals ?? {
-    weeklyRevenueTarget: null,
-    monthlyRevenueTarget: null,
+  revenueGoals: {
+    weeklyRevenueTarget: state.revenueGoals?.weeklyRevenueTarget ?? null,
+    monthlyRevenueTarget: state.revenueGoals?.monthlyRevenueTarget ?? null,
+    monthlyAverageCheckStart: state.revenueGoals?.monthlyAverageCheckStart ?? null,
+    monthlyAverageCheckTarget: state.revenueGoals?.monthlyAverageCheckTarget ?? null,
   },
   dailyBusinessMetrics: state.dailyBusinessMetrics ?? [],
   session: createAnonymousSession({
@@ -950,6 +954,14 @@ export const useAppStore = create<Store>()(
               input.monthlyRevenueTarget && input.monthlyRevenueTarget > 0
                 ? input.monthlyRevenueTarget
                 : null,
+            monthlyAverageCheckStart:
+              input.monthlyAverageCheckStart && input.monthlyAverageCheckStart > 0
+                ? input.monthlyAverageCheckStart
+                : null,
+            monthlyAverageCheckTarget:
+              input.monthlyAverageCheckTarget && input.monthlyAverageCheckTarget > 0
+                ? input.monthlyAverageCheckTarget
+                : null,
           },
         });
 
@@ -1011,7 +1023,7 @@ export const useAppStore = create<Store>()(
     }),
     {
       name: storageKey,
-      version: 6,
+      version: 7,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedStoreSlice => ({
         telegramName: state.telegramName,

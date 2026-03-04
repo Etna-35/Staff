@@ -84,6 +84,12 @@ const OwnerRevenuePanel = () => {
   const [monthlyPlanInput, setMonthlyPlanInput] = useState(
     toInputValue(revenueGoals.monthlyRevenueTarget),
   );
+  const [monthlyAverageCheckStartInput, setMonthlyAverageCheckStartInput] = useState(
+    toInputValue(revenueGoals.monthlyAverageCheckStart),
+  );
+  const [monthlyAverageCheckTargetInput, setMonthlyAverageCheckTargetInput] = useState(
+    toInputValue(revenueGoals.monthlyAverageCheckTarget),
+  );
   const [dailyRevenueInput, setDailyRevenueInput] = useState('');
   const [averageCheckActualInput, setAverageCheckActualInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -93,7 +99,14 @@ const OwnerRevenuePanel = () => {
   useEffect(() => {
     setWeeklyPlanInput(toInputValue(revenueGoals.weeklyRevenueTarget));
     setMonthlyPlanInput(toInputValue(revenueGoals.monthlyRevenueTarget));
-  }, [revenueGoals.monthlyRevenueTarget, revenueGoals.weeklyRevenueTarget]);
+    setMonthlyAverageCheckStartInput(toInputValue(revenueGoals.monthlyAverageCheckStart));
+    setMonthlyAverageCheckTargetInput(toInputValue(revenueGoals.monthlyAverageCheckTarget));
+  }, [
+    revenueGoals.monthlyAverageCheckStart,
+    revenueGoals.monthlyAverageCheckTarget,
+    revenueGoals.monthlyRevenueTarget,
+    revenueGoals.weeklyRevenueTarget,
+  ]);
 
   useEffect(() => {
     setDailyRevenueInput(toInputValue(currentMetric?.revenueActual ?? null));
@@ -110,6 +123,8 @@ const OwnerRevenuePanel = () => {
     const result = saveRevenueGoals({
       weeklyRevenueTarget: toNullableNumber(weeklyPlanInput),
       monthlyRevenueTarget: toNullableNumber(monthlyPlanInput),
+      monthlyAverageCheckStart: toNullableNumber(monthlyAverageCheckStartInput),
+      monthlyAverageCheckTarget: toNullableNumber(monthlyAverageCheckTargetInput),
     });
 
     if (!result.ok) {
@@ -126,7 +141,7 @@ const OwnerRevenuePanel = () => {
     const result = saveDailyBusinessMetric({
       dateKey: selectedDate,
       revenueActual: toNullableNumber(dailyRevenueInput),
-      averageCheckTarget: currentMetric?.averageCheckTarget ?? null,
+      averageCheckTarget: null,
       averageCheckActual: toNullableNumber(averageCheckActualInput),
     });
 
@@ -143,7 +158,7 @@ const OwnerRevenuePanel = () => {
       <SectionTitle title="Панель основателя" />
       <div className="space-y-4">
         <div className="rounded-2xl bg-fog p-4">
-          <p className="text-xs text-ink/45">Планы по выручке</p>
+          <p className="text-xs text-ink/45">Установка планов на месяц и неделю</p>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Input
               type="number"
@@ -158,6 +173,20 @@ const OwnerRevenuePanel = () => {
               placeholder="План на месяц"
               value={monthlyPlanInput}
               onChange={(event) => setMonthlyPlanInput(event.target.value)}
+            />
+            <Input
+              type="number"
+              min="0"
+              placeholder="Старт среднего чека"
+              value={monthlyAverageCheckStartInput}
+              onChange={(event) => setMonthlyAverageCheckStartInput(event.target.value)}
+            />
+            <Input
+              type="number"
+              min="0"
+              placeholder="Цель среднего чека"
+              value={monthlyAverageCheckTargetInput}
+              onChange={(event) => setMonthlyAverageCheckTargetInput(event.target.value)}
             />
           </div>
           <div className="mt-3">

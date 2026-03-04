@@ -109,6 +109,8 @@ export type TimeEntry = {
 export type RevenueGoals = {
   weeklyRevenueTarget: number | null;
   monthlyRevenueTarget: number | null;
+  monthlyAverageCheckStart: number | null;
+  monthlyAverageCheckTarget: number | null;
 };
 
 export type DailyBusinessMetric = {
