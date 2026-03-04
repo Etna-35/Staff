@@ -8,6 +8,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
+import { canAccessGoals } from '../lib/goalsAccess';
 import { getCurrentEmployee, useAppStore } from '../store/useAppStore';
 
 export const Screen = ({ children }: PropsWithChildren) => (
@@ -184,7 +185,9 @@ const navItems = [
 
 export const BottomBar = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
-  const visibleNavItems = currentEmployee?.role === 'owner' ? navItems : navItems.filter((item) => item.to !== '/goals');
+  const visibleNavItems = canAccessGoals(currentEmployee?.role)
+    ? navItems
+    : navItems.filter((item) => item.to !== '/goals');
 
   return (
     <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md px-4 pb-4 safe-pb">
