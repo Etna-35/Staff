@@ -64,7 +64,7 @@ const moodOptions: {
 }[] = [
   { value: 'sad', emoji: '😞', label: 'Тяжело' },
   { value: 'tired', emoji: '😐', label: 'Неровно' },
-  { value: 'okay', emoji: '🙂', label: 'Нормально' },
+  { value: 'okay', emoji: '🙂', label: 'Норм' },
   { value: 'happy', emoji: '😄', label: 'Хорошо' },
   { value: 'amazing', emoji: '🤩', label: 'Огонь' },
 ];
@@ -633,8 +633,8 @@ export const ShiftScreen = () => {
           <div className="w-full rounded-t-[2rem] bg-white p-5">
             <h3 className="text-lg font-semibold">Как прошел день?</h3>
             <p className="mt-2 text-sm text-ink/60">
-              Отметьте настроение смены и, если хотите, поблагодарите коллегу одной
-              звездочкой.
+              Отметьте настроение смены и, если хотите, отметьте одного из коллег,
+              кто сегодня был лучше всех.
             </p>
 
             <div className="mt-4 grid grid-cols-5 gap-2">
@@ -661,9 +661,9 @@ export const ShiftScreen = () => {
             <div className="mt-5 rounded-2xl bg-fog p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-ink">1 звездочка благодарности</p>
+                  <p className="font-semibold text-ink">Особая благодарность</p>
                   <p className="mt-1 text-sm text-ink/55">
-                    Дарится один раз в сутки и обновляется после 00:00.
+                    Дарится один раз в сутки
                   </p>
                 </div>
                 <div className="text-xl">⭐</div>
@@ -701,7 +701,8 @@ export const ShiftScreen = () => {
                 )
               ) : (
                 <p className="mt-3 text-sm text-ink/55">
-                  Звездочка откроется после смены длиной не менее 5 часов.
+                  Отметить коллегу можно только после совместной смены длиной не менее
+                  5 часов.
                 </p>
               )}
             </div>
@@ -710,7 +711,7 @@ export const ShiftScreen = () => {
               <p className="mt-4 text-sm font-semibold text-red-700">{reflectionError}</p>
             ) : null}
 
-            <div className="mt-5 flex gap-3">
+            <div className="mt-5 grid grid-cols-2 gap-3">
               <PrimaryButton
                 disabled={!selectedMood || isSavingReflection}
                 onClick={() => void submitWrapUp()}
@@ -718,7 +719,6 @@ export const ShiftScreen = () => {
                 {isSavingReflection ? 'Сохраняем...' : 'Сохранить'}
               </PrimaryButton>
               <SecondaryButton
-                className="w-auto shrink-0"
                 onClick={() => {
                   setWrapUpContext(null);
                   setSelectedMood(null);
