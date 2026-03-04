@@ -69,6 +69,25 @@ const moodOptions: {
   { value: 'amazing', emoji: '🤩', label: 'Огонь' },
 ];
 
+const checklistMeta = {
+  waiter: {
+    opening: 'Подготовка зала, кассы и стартовых позиций.',
+    closing: 'Финальные действия по смене, фото и потери.',
+  },
+  bartender: {
+    opening: 'Подготовка бара, льда и стартовых заготовок.',
+    closing: 'Передача бара, потери и фото закрытия.',
+  },
+  chef: {
+    opening: 'Проверка кухни, заготовок и стартовых позиций.',
+    closing: 'Остатки, потери, передача и фото закрытия.',
+  },
+  owner: {
+    opening: 'Контроль запуска команды и стартовых точек смены.',
+    closing: 'Контроль финальных чек-листов команды и закрытия смены.',
+  },
+} as const;
+
 export const ShiftScreen = () => {
   const {
     telegramName,
@@ -170,6 +189,8 @@ export const ShiftScreen = () => {
 
   const completedCount = stages.filter((stage) => stage.done).length;
   const progress = Math.round((completedCount / stages.length) * 100);
+  const roleChecklist =
+    currentEmployee?.role ? checklistMeta[currentEmployee.role] : null;
   const normalizeAssignee = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
   const myTasks = currentEmployee
     ? tasks.filter(
@@ -466,53 +487,82 @@ export const ShiftScreen = () => {
         </div>
       </Card>
 
-      <div>
-        <SectionTitle title="Этапы" />
-        <div className="space-y-3">
-          {stages.map((stage) => {
-            const meta = stageMeta[stage.key];
-            const statusIcon = stage.done ? '✅' : stage.key === 'losses' ? '🟡' : '⬜';
+      {roleChecklist ? (
+        <div>
+          <SectionTitle title="Задачи" />
+          <div className="space-y-3">
+            <Card>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-ink">Чек-лист открытия смены</p>
+                  <p className="mt-2 text-sm text-ink/60">{roleChecklist.opening}</p>
+                </div>
+                <Pill>Скоро</Pill>
+              </div>
+            </Card>
 
-            return (
-              <Card key={stage.key} className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{statusIcon}</span>
-                    <h3 className="font-semibold">{meta.title}</h3>
-                  </div>
-                  <p className="mt-1 text-sm text-ink/60">{meta.description}</p>
+            <Card className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-ink">Чек-лист закрытия смены</p>
+                  <p className="mt-2 text-sm text-ink/60">{roleChecklist.closing}</p>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  {meta.href ? (
-                    <Link
-                      to={meta.href}
-                      className="rounded-2xl bg-fog px-3 py-2 text-sm font-semibold"
+                <Pill>{completedCount}/{stages.length}</Pill>
+              </div>
+
+              <div className="space-y-3">
+                {stages.map((stage) => {
+                  const meta = stageMeta[stage.key];
+                  const statusIcon = stage.done ? '✅' : stage.key === 'losses' ? '🟡' : '⬜';
+
+                  return (
+                    <div
+                      key={stage.key}
+                      className="rounded-2xl bg-fog px-3 py-3"
                     >
-                      Открыть
-                    </Link>
-                  ) : null}
-                  {stage.key === 'leftovers' ? (
-                    <button
-                      className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                      onClick={() => completeStage('leftovers')}
-                    >
-                      Готово
-                    </button>
-                  ) : null}
-                  {stage.key === 'closingPhotos' ? (
-                    <button
-                      className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                      onClick={() => setShowPhotos(true)}
-                    >
-                      Фото
-                    </button>
-                  ) : null}
-                </div>
-              </Card>
-            );
-          })}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{statusIcon}</span>
+                            <p className="font-semibold text-ink">{meta.title}</p>
+                          </div>
+                          <p className="mt-1 text-sm text-ink/60">{meta.description}</p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          {meta.href ? (
+                            <Link
+                              to={meta.href}
+                              className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold"
+                            >
+                              Открыть
+                            </Link>
+                          ) : null}
+                          {stage.key === 'leftovers' ? (
+                            <button
+                              className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
+                              onClick={() => completeStage('leftovers')}
+                            >
+                              Готово
+                            </button>
+                          ) : null}
+                          {stage.key === 'closingPhotos' ? (
+                            <button
+                              className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
+                              onClick={() => setShowPhotos(true)}
+                            >
+                              Фото
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {showPhotos ? (
         <div className="fixed inset-0 z-20 flex items-end bg-black/30">
