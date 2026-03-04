@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { appLinks } from '../config/links';
 import {
@@ -31,6 +31,22 @@ import {
 
 const revealDurationMs = 12_000;
 const sanitizePin = (value: string) => value.replace(/\D/g, '').slice(0, 6);
+const monthLabels = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
+];
+const weekdayLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const trackingStartDate = new Date(2026, 2, 1, 12, 0, 0, 0);
 
 const periodLabels: Record<TimesheetPeriod, string> = {
   day: 'Сегодня',
@@ -51,6 +67,13 @@ const toNullableNumber = (value: string) => {
 
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
+
+const formatCalendarTitle = (date: Date) => `${monthLabels[date.getMonth()]} ${date.getFullYear()}`;
+
+const parseDateKey = (dateKey: string) => new Date(`${dateKey}T12:00:00`);
+
+const getMonthStartKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
 
 const StatValue = ({
   value,
@@ -77,7 +100,13 @@ const OwnerRevenuePanel = () => {
   const dailyBusinessMetrics = useAppStore((state) => state.dailyBusinessMetrics);
   const saveRevenueGoals = useAppStore((state) => state.saveRevenueGoals);
   const saveDailyBusinessMetric = useAppStore((state) => state.saveDailyBusinessMetric);
-  const [selectedDate, setSelectedDate] = useState(getLocalDateKey(new Date()));
+  const initialTrackedDate = useMemo(() => {
+    const now = new Date();
+
+    return now < trackingStartDate ? trackingStartDate : now;
+  }, []);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateKey(initialTrackedDate));
+  const [viewMonthKey, setViewMonthKey] = useState(getMonthStartKey(initialTrackedDate));
   const [weeklyPlanInput, setWeeklyPlanInput] = useState(
     toInputValue(revenueGoals.weeklyRevenueTarget),
   );
@@ -95,6 +124,34 @@ const OwnerRevenuePanel = () => {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const currentMetric = getDailyBusinessMetricForDate(dailyBusinessMetrics, selectedDate);
+  const viewMonthDate = parseDateKey(viewMonthKey);
+  const calendarDays = useMemo(() => {
+    const year = viewMonthDate.getFullYear();
+    const month = viewMonthDate.getMonth();
+    const firstDay = new Date(year, month, 1, 12, 0, 0, 0);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = (firstDay.getDay() + 6) % 7;
+    const cells: Array<{ dateKey: string; dayNumber: number; filled: boolean } | null> = [];
+
+    for (let index = 0; index < firstWeekday; index += 1) {
+      cells.push(null);
+    }
+
+    for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
+      const date = new Date(year, month, dayNumber, 12, 0, 0, 0);
+      const dateKey = getLocalDateKey(date);
+      const metric = getDailyBusinessMetricForDate(dailyBusinessMetrics, dateKey);
+
+      cells.push({
+        dateKey,
+        dayNumber,
+        filled: Boolean(metric && (metric.revenueActual !== null || metric.averageCheckActual !== null)),
+      });
+    }
+
+    return cells;
+  }, [dailyBusinessMetrics, viewMonthDate]);
+  const canGoPrevMonth = viewMonthDate > trackingStartDate;
 
   useEffect(() => {
     setWeeklyPlanInput(toInputValue(revenueGoals.weeklyRevenueTarget));
@@ -153,6 +210,26 @@ const OwnerRevenuePanel = () => {
     setFeedback('Показатели дня обновлены');
   };
 
+  const changeViewMonth = (direction: -1 | 1) => {
+    const next = new Date(viewMonthDate);
+    next.setMonth(viewMonthDate.getMonth() + direction, 1);
+    next.setHours(12, 0, 0, 0);
+
+    if (next < trackingStartDate) {
+      return;
+    }
+
+    setViewMonthKey(getMonthStartKey(next));
+    const selected = parseDateKey(selectedDate);
+
+    if (
+      selected.getFullYear() !== next.getFullYear() ||
+      selected.getMonth() !== next.getMonth()
+    ) {
+      setSelectedDate(getMonthStartKey(next));
+    }
+  };
+
   return (
     <Card>
       <SectionTitle title="Панель основателя" />
@@ -196,12 +273,55 @@ const OwnerRevenuePanel = () => {
 
         <div className="rounded-2xl bg-fog p-4">
           <p className="text-xs text-ink/45">Дневные показатели</p>
+          <div className="mt-3 rounded-2xl bg-white/70 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                className="rounded-2xl bg-fog px-3 py-2 text-sm font-semibold text-ink disabled:opacity-35"
+                onClick={() => changeViewMonth(-1)}
+                disabled={!canGoPrevMonth}
+              >
+                ←
+              </button>
+              <p className="text-sm font-semibold text-ink">{formatCalendarTitle(viewMonthDate)}</p>
+              <button
+                type="button"
+                className="rounded-2xl bg-fog px-3 py-2 text-sm font-semibold text-ink"
+                onClick={() => changeViewMonth(1)}
+              >
+                →
+              </button>
+            </div>
+            <div className="mt-3 grid grid-cols-7 gap-2">
+              {weekdayLabels.map((label) => (
+                <p key={label} className="text-center text-[11px] font-semibold text-ink/35">
+                  {label}
+                </p>
+              ))}
+              {calendarDays.map((cell, index) =>
+                cell ? (
+                  <button
+                    key={cell.dateKey}
+                    type="button"
+                    className={`aspect-square rounded-xl text-sm font-semibold transition ${
+                      cell.dateKey === selectedDate
+                        ? 'bg-ink text-white'
+                        : cell.filled
+                          ? 'bg-clay/25 text-ink'
+                          : 'bg-fog text-ink/65'
+                    }`}
+                    onClick={() => setSelectedDate(cell.dateKey)}
+                  >
+                    {cell.dayNumber}
+                  </button>
+                ) : (
+                  <div key={`empty-${index}`} className="aspect-square rounded-xl bg-transparent" />
+                ),
+              )}
+            </div>
+          </div>
           <div className="mt-3 space-y-3">
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
-            />
+            <p className="text-xs text-ink/45">Выбрана дата: {selectedDate}</p>
             <Input
               type="number"
               min="0"

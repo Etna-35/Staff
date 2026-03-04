@@ -1023,8 +1023,9 @@ export const useAppStore = create<Store>()(
     }),
     {
       name: storageKey,
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState) => persistedState as PersistedStoreSlice,
       partialize: (state): PersistedStoreSlice => ({
         telegramName: state.telegramName,
         shift: state.shift,
