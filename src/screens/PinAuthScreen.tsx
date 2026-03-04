@@ -78,7 +78,6 @@ export const PinAuthScreen = () => {
     <Screen>
       <div className="flex min-h-[calc(100vh-4rem)] flex-col justify-center gap-4">
         <div>
-          <p className="text-sm text-ink/55">Restaurant OS</p>
           <h1 className="font-display text-3xl font-semibold text-ink">
             Доступ только для сотрудников ресторана
           </h1>
@@ -147,7 +146,7 @@ export const PinAuthScreen = () => {
                     ) : null}
                     {loginEmployees.map((employee) => (
                       <option key={employee.id} value={employee.id}>
-                        {employee.fullName} · {employee.positionTitle}
+                        {employee.fullName}
                       </option>
                     ))}
                   </Select>
