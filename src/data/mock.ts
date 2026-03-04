@@ -107,6 +107,7 @@ export const mockState: AppState = {
     me: null,
   },
   shiftReflections: [],
+  specialStarAwards: [],
   revenueGoals: {
     weeklyRevenueTarget: 580000,
     monthlyRevenueTarget: 2450000,

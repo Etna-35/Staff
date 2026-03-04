@@ -96,10 +96,12 @@ const StatValue = ({
 
 const OwnerRevenuePanel = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
+  const employees = useAppStore((state) => state.employees);
   const revenueGoals = useAppStore((state) => state.revenueGoals);
   const dailyBusinessMetrics = useAppStore((state) => state.dailyBusinessMetrics);
   const saveRevenueGoals = useAppStore((state) => state.saveRevenueGoals);
   const saveDailyBusinessMetric = useAppStore((state) => state.saveDailyBusinessMetric);
+  const grantSpecialStar = useAppStore((state) => state.grantSpecialStar);
   const initialTrackedDate = useMemo(() => {
     const now = new Date();
 
@@ -123,7 +125,11 @@ const OwnerRevenuePanel = () => {
   const [averageCheckActualInput, setAverageCheckActualInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [grantingEmployeeId, setGrantingEmployeeId] = useState<string | null>(null);
   const currentMetric = getDailyBusinessMetricForDate(dailyBusinessMetrics, selectedDate);
+  const specialStarCandidates = employees
+    .filter((employee) => employee.isActive && employee.id !== currentEmployee?.id)
+    .sort((left, right) => left.fullName.localeCompare(right.fullName, 'ru'));
   const viewMonthDate = parseDateKey(viewMonthKey);
   const calendarDays = useMemo(() => {
     const year = viewMonthDate.getFullYear();
@@ -208,6 +214,29 @@ const OwnerRevenuePanel = () => {
     }
 
     setFeedback('Показатели дня обновлены');
+  };
+
+  const handleGrantSpecialStar = async (employeeId: string) => {
+    setFeedback(null);
+    setError(null);
+    setGrantingEmployeeId(employeeId);
+
+    const result = await grantSpecialStar({
+      employeeId,
+      dateKey: getLocalDateKey(new Date()),
+    });
+
+    setGrantingEmployeeId(null);
+
+    if (!result.ok) {
+      setError(result.reason ?? 'Не удалось выдать особую звезду');
+      return;
+    }
+
+    const employeeName =
+      specialStarCandidates.find((employee) => employee.id === employeeId)?.fullName ??
+      'сотруднику';
+    setFeedback(`Особая звезда отправлена: ${employeeName}`);
   };
 
   const changeViewMonth = (direction: -1 | 1) => {
@@ -340,6 +369,29 @@ const OwnerRevenuePanel = () => {
           <div className="mt-3">
             <PrimaryButton onClick={saveDailyMetric}>Сохранить факт дня</PrimaryButton>
           </div>
+        </div>
+
+        <div className="rounded-2xl bg-fog p-4">
+          <p className="text-xs text-ink/45">Особые звезды для личного зачота</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {specialStarCandidates.map((employee) => (
+              <button
+                key={employee.id}
+                type="button"
+                className="rounded-2xl bg-white px-3 py-3 text-left text-sm font-semibold text-ink shadow-sm"
+                onClick={() => void handleGrantSpecialStar(employee.id)}
+                disabled={grantingEmployeeId === employee.id}
+              >
+                <span className="block truncate">{employee.fullName}</span>
+                <span className="mt-1 block text-xs font-medium text-ink/45">
+                  {grantingEmployeeId === employee.id ? 'Отправляем…' : 'Выдать ✦'}
+                </span>
+              </button>
+            ))}
+          </div>
+          {specialStarCandidates.length === 0 ? (
+            <p className="mt-3 text-sm text-ink/55">Пока нет сотрудников для выдачи звезды.</p>
+          ) : null}
         </div>
 
         {error ? <p className="text-sm text-red-700">{error}</p> : null}

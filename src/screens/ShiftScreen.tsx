@@ -10,6 +10,7 @@ import {
   getEmployeeReflectionForDate,
   getLocalDateKey,
   getLoginEmployees,
+  getReceivedSpecialStarsCount,
   getReceivedStarsCount,
   getRevenueActualForPeriod,
   getVisibleStageKeys,
@@ -92,6 +93,8 @@ export const ShiftScreen = () => {
     shiftReflections,
     loadShiftReflections,
     submitShiftReflection,
+    specialStarAwards,
+    loadSpecialStarAwards,
     refreshLoginEmployees,
     tasks,
   } = useAppStore();
@@ -128,7 +131,11 @@ export const ShiftScreen = () => {
       period: 'week',
       dateKey: todayDateKey,
     });
-  }, [currentEmployee?.id, loadShiftReflections, todayDateKey]);
+    void loadSpecialStarAwards({
+      period: 'week',
+      dateKey: todayDateKey,
+    });
+  }, [currentEmployee?.id, loadShiftReflections, loadSpecialStarAwards, todayDateKey]);
 
   useEffect(() => {
     if (loginEmployees.length > 0) {
@@ -184,6 +191,9 @@ export const ShiftScreen = () => {
     : null;
   const teamStarsCount = currentEmployee
     ? getReceivedStarsCount(shiftReflections, currentEmployee.id)
+    : 0;
+  const personalStarsCount = currentEmployee
+    ? getReceivedSpecialStarsCount(specialStarAwards, currentEmployee.id)
     : 0;
   const gratitudeCandidates = useMemo(
     () =>
@@ -458,11 +468,11 @@ export const ShiftScreen = () => {
           </div>
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Личный зачот</p>
-            <p className="mt-1 text-xl font-semibold text-ink">
-              {todayReflection ? moodEmojiMap[todayReflection.mood] : '—'}
-            </p>
+            <p className="mt-1 text-xl font-semibold text-ink">{personalStarsCount} ✦</p>
             <p className="mt-1 text-xs text-ink/45">
-              {todayReflection ? 'настрой дня' : 'без оценки сегодня'}
+              {todayReflection
+                ? `${moodEmojiMap[todayReflection.mood]} и особые звезды`
+                : 'особые звезды от основателя'}
             </p>
           </div>
         </div>

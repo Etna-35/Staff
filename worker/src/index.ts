@@ -29,6 +29,14 @@ type ShiftReflection = {
   updatedAt: string;
 };
 
+type SpecialStarAward = {
+  id: string;
+  dateKey: string;
+  employeeId: string;
+  issuedByEmployeeId: string;
+  createdAt: string;
+};
+
 type Env = {
   STAFF_KV: KVNamespace;
   SESSION_SECRET: string;
@@ -38,6 +46,7 @@ type Env = {
 const EMP_INDEX_KEY = "employees:index";
 const BOOTSTRAP_KEY = "bootstrap:done";
 const SHIFT_REFLECTION_PREFIX = "shift-reflection:";
+const SPECIAL_STAR_PREFIX = "special-star:";
 
 function json(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -268,6 +277,10 @@ function getShiftReflectionKey(dateKey: string, employeeId: string) {
   return `${SHIFT_REFLECTION_PREFIX}${dateKey}:${employeeId}`;
 }
 
+function getSpecialStarKey(dateKey: string, awardId: string) {
+  return `${SPECIAL_STAR_PREFIX}${dateKey}:${awardId}`;
+}
+
 async function getShiftReflectionsForDate(env: Env, dateKey: string): Promise<ShiftReflection[]> {
   const listed = await env.STAFF_KV.list({ prefix: `${SHIFT_REFLECTION_PREFIX}${dateKey}:` });
 
@@ -298,6 +311,43 @@ async function getShiftReflectionsForPeriod(
   return grouped
     .flat()
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+async function getSpecialStarAwardsForDate(
+  env: Env,
+  dateKey: string
+): Promise<SpecialStarAward[]> {
+  const listed = await env.STAFF_KV.list({ prefix: `${SPECIAL_STAR_PREFIX}${dateKey}:` });
+
+  const values = await Promise.all(
+    listed.keys.map(async ({ name }) => {
+      const raw = await env.STAFF_KV.get(name);
+      if (!raw) return null;
+
+      try {
+        return JSON.parse(raw) as SpecialStarAward;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return values.filter((value): value is SpecialStarAward => Boolean(value));
+}
+
+async function getSpecialStarAwardsForPeriod(
+  env: Env,
+  period: "day" | "week",
+  dateKey: string
+): Promise<SpecialStarAward[]> {
+  const dateKeys = getDateKeysForPeriod(period, dateKey);
+  const grouped = await Promise.all(
+    dateKeys.map((key) => getSpecialStarAwardsForDate(env, key))
+  );
+
+  return grouped
+    .flat()
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
 export default {
@@ -530,6 +580,55 @@ export default {
       await env.STAFF_KV.put(key, JSON.stringify(reflection));
 
       return withCors(request, env, json({ ok: true, reflection }, { status: 201 }));
+    }
+
+    if (request.method === "GET" && path === "/api/special-stars") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const period = url.searchParams.get("period") === "day" ? "day" : "week";
+      const dateKey = (url.searchParams.get("dateKey") || "").trim();
+
+      if (!isValidDateKey(dateKey)) {
+        return withCors(request, env, badRequest("dateKey must be YYYY-MM-DD"));
+      }
+
+      const awards = await getSpecialStarAwardsForPeriod(env, period, dateKey);
+      return withCors(request, env, json({ ok: true, awards }));
+    }
+
+    if (request.method === "POST" && path === "/api/special-stars") {
+      if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
+
+      const body = await readJson<{ employeeId: string; dateKey: string }>(request);
+      if (!body) return withCors(request, env, badRequest("Expected JSON body"));
+
+      const employeeId = (body.employeeId || "").trim();
+      const dateKey = (body.dateKey || "").trim();
+
+      if (!employeeId) return withCors(request, env, badRequest("employeeId is required"));
+      if (!isValidDateKey(dateKey)) {
+        return withCors(request, env, badRequest("dateKey must be YYYY-MM-DD"));
+      }
+
+      const recipient = await getEmployee(env, employeeId);
+      if (!recipient || !recipient.isActive) {
+        return withCors(request, env, badRequest("Employee not found"));
+      }
+
+      const award: SpecialStarAward = {
+        id: randomId("special_star"),
+        dateKey,
+        employeeId,
+        issuedByEmployeeId: session.employeeId,
+        createdAt: new Date().toISOString(),
+      };
+
+      await env.STAFF_KV.put(getSpecialStarKey(dateKey, award.id), JSON.stringify(award));
+
+      return withCors(request, env, json({ ok: true, award }, { status: 201 }));
     }
 
     // Owner-only list

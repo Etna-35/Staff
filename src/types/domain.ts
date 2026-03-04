@@ -120,6 +120,14 @@ export type ShiftReflection = {
   updatedAt: string;
 };
 
+export type SpecialStarAward = {
+  id: string;
+  dateKey: string;
+  employeeId: string;
+  issuedByEmployeeId: string;
+  createdAt: string;
+};
+
 export type RevenueGoals = {
   weeklyRevenueTarget: number | null;
   monthlyRevenueTarget: number | null;
@@ -147,6 +155,7 @@ export type AppState = {
   session: SessionState;
   timeEntries: TimeEntry[];
   shiftReflections: ShiftReflection[];
+  specialStarAwards: SpecialStarAward[];
   revenueGoals: RevenueGoals;
   dailyBusinessMetrics: DailyBusinessMetric[];
 };

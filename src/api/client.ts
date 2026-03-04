@@ -2,6 +2,7 @@ import type {
   Employee,
   EmployeeLoginOption,
   EmployeeRole,
+  SpecialStarAward,
   ShiftMood,
   ShiftReflection,
   ShiftReflectionPeriod,
@@ -43,6 +44,16 @@ type ShiftReflectionListResponse = {
 type ShiftReflectionResponse = {
   ok: boolean;
   reflection: ShiftReflection;
+};
+
+type SpecialStarAwardListResponse = {
+  ok: boolean;
+  awards: SpecialStarAward[];
+};
+
+type SpecialStarAwardResponse = {
+  ok: boolean;
+  award: SpecialStarAward;
 };
 
 export class ApiError extends Error {
@@ -229,4 +240,31 @@ export const apiClient = {
       body: input,
       onUnauthorized,
     }).then((payload) => payload.reflection),
+  getSpecialStarAwards: (
+    token: string,
+    period: ShiftReflectionPeriod,
+    dateKey: string,
+    onUnauthorized?: () => void,
+  ) =>
+    request<SpecialStarAwardListResponse>(
+      `/api/special-stars?period=${period}&dateKey=${dateKey}`,
+      {
+        token,
+        onUnauthorized,
+      },
+    ).then((payload) => payload.awards),
+  grantSpecialStar: (
+    token: string,
+    input: {
+      employeeId: string;
+      dateKey: string;
+    },
+    onUnauthorized?: () => void,
+  ) =>
+    request<SpecialStarAwardResponse>('/api/special-stars', {
+      method: 'POST',
+      token,
+      body: input,
+      onUnauthorized,
+    }).then((payload) => payload.award),
 };

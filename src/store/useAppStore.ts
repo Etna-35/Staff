@@ -25,6 +25,7 @@ import type {
   EmployeeRole,
   HandoffArea,
   RequestCategory,
+  SpecialStarAward,
   ShiftMood,
   ShiftReflection,
   ShiftReflectionPeriod,
@@ -97,6 +98,7 @@ type Store = AppState & {
   employeesLoading: boolean;
   loginEmployeesLoading: boolean;
   shiftReflectionsLoading: boolean;
+  specialStarAwardsLoading: boolean;
   authError: string | null;
   setTelegramName: (name: string) => void;
   clearAuthError: () => void;
@@ -130,6 +132,14 @@ type Store = AppState & {
     dateKey: string;
   }) => Promise<void>;
   submitShiftReflection: (input: ShiftReflectionInput) => Promise<ActionResult>;
+  loadSpecialStarAwards: (payload: {
+    period: ShiftReflectionPeriod;
+    dateKey: string;
+  }) => Promise<void>;
+  grantSpecialStar: (input: {
+    employeeId: string;
+    dateKey: string;
+  }) => Promise<ActionResult>;
   saveRevenueGoals: (input: RevenueGoalsInput) => ActionResult;
   saveDailyBusinessMetric: (input: DailyBusinessMetricInput) => ActionResult;
   resetDemo: () => void;
@@ -169,6 +179,7 @@ const normalizeState = (state: AppState): AppState => ({
   employees: state.employees ?? [],
   loginEmployees: state.loginEmployees ?? [],
   shiftReflections: state.shiftReflections ?? [],
+  specialStarAwards: state.specialStarAwards ?? [],
   revenueGoals: {
     weeklyRevenueTarget: state.revenueGoals?.weeklyRevenueTarget ?? null,
     monthlyRevenueTarget: state.revenueGoals?.monthlyRevenueTarget ?? null,
@@ -259,6 +270,9 @@ const sortDailyBusinessMetrics = (metrics: DailyBusinessMetric[]) =>
 const sortShiftReflections = (reflections: ShiftReflection[]) =>
   [...reflections].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 
+const sortSpecialStarAwards = (awards: SpecialStarAward[]) =>
+  [...awards].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
 export const useAppStore = create<Store>()(
   persist(
     (set, get) => ({
@@ -266,6 +280,7 @@ export const useAppStore = create<Store>()(
       employeesLoading: false,
       loginEmployeesLoading: false,
       shiftReflectionsLoading: false,
+      specialStarAwardsLoading: false,
       authError: null,
       setTelegramName: (name) => set({ telegramName: name }),
       clearAuthError: () => set({ authError: null }),
@@ -283,6 +298,7 @@ export const useAppStore = create<Store>()(
               ...(bootstrapped ? {} : { token: null, me: null }),
             },
             shiftReflections: bootstrapped ? state.shiftReflections : [],
+            specialStarAwards: bootstrapped ? state.specialStarAwards : [],
           }));
 
           if (bootstrapped) {
@@ -388,6 +404,7 @@ export const useAppStore = create<Store>()(
               token: sessionToken,
             },
             shiftReflections: [],
+            specialStarAwards: [],
           }));
           await get().loadMe();
           await get().refreshLoginEmployees().catch(() => undefined);
@@ -431,6 +448,7 @@ export const useAppStore = create<Store>()(
               token: sessionToken,
             },
             shiftReflections: [],
+            specialStarAwards: [],
           }));
           await get().loadMe();
 
@@ -451,6 +469,8 @@ export const useAppStore = create<Store>()(
           authError: null,
           shiftReflections: [],
           shiftReflectionsLoading: false,
+          specialStarAwards: [],
+          specialStarAwardsLoading: false,
           session: {
             ...state.session,
             token: null,
@@ -1033,6 +1053,80 @@ export const useAppStore = create<Store>()(
           };
         }
       },
+      loadSpecialStarAwards: async ({ period, dateKey }) => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          set({ specialStarAwards: [], specialStarAwardsLoading: false });
+          return;
+        }
+
+        set({ specialStarAwardsLoading: true });
+
+        try {
+          const awards = await apiClient.getSpecialStarAwards(
+            token,
+            period,
+            dateKey,
+            () => get().logout(),
+          );
+
+          set({
+            authError: null,
+            specialStarAwards: sortSpecialStarAwards(awards),
+            specialStarAwardsLoading: false,
+          });
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            return;
+          }
+
+          set({
+            authError:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось загрузить особые звезды.',
+            specialStarAwardsLoading: false,
+          });
+        }
+      },
+      grantSpecialStar: async (input) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        if (!input.employeeId) {
+          return {
+            ok: false,
+            reason: 'Выберите сотрудника',
+          };
+        }
+
+        try {
+          const award = await apiClient.grantSpecialStar(token, input, () => get().logout());
+
+          set((state) => ({
+            authError: null,
+            specialStarAwards: sortSpecialStarAwards([award, ...state.specialStarAwards]),
+          }));
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось выдать особую звезду',
+          };
+        }
+      },
       saveRevenueGoals: (input) => {
         const currentEmployee = getCurrentEmployee(get());
 
@@ -1119,6 +1213,7 @@ export const useAppStore = create<Store>()(
           employeesLoading: false,
           loginEmployeesLoading: false,
           shiftReflectionsLoading: false,
+          specialStarAwardsLoading: false,
         })),
     }),
     {
@@ -1170,6 +1265,7 @@ export const useAppStore = create<Store>()(
           employeesLoading: false,
           loginEmployeesLoading: false,
           shiftReflectionsLoading: false,
+          specialStarAwardsLoading: false,
           authError: null,
         };
       },
@@ -1274,6 +1370,11 @@ export const getReceivedStarsCount = (
   employeeId: string,
 ) =>
   reflections.filter((reflection) => reflection.starRecipientId === employeeId).length;
+
+export const getReceivedSpecialStarsCount = (
+  awards: SpecialStarAward[],
+  employeeId: string,
+) => awards.filter((award) => award.employeeId === employeeId).length;
 
 const getPeriodBounds = (period: TimesheetPeriod, now = new Date()) => {
   const start = new Date(now);
