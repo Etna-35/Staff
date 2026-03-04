@@ -7,6 +7,10 @@ import {
   getDailyBusinessMetricsForPeriod,
   getCurrentActiveEntry,
   getCurrentEmployee,
+  getEmployeeReflectionForDate,
+  getLocalDateKey,
+  getLoginEmployees,
+  getReceivedStarsCount,
   getRevenueActualForPeriod,
   getVisibleStageKeys,
   useAppStore,
@@ -18,9 +22,11 @@ import {
   Pill,
   PrimaryButton,
   ProgressBar,
+  SecondaryButton,
   SectionTitle,
   ShellHeader,
 } from '../components/ui';
+import type { ShiftMood } from '../types/domain';
 
 const stageMeta: Record<
   'leftovers' | 'losses' | 'handoff' | 'closingPhotos',
@@ -51,6 +57,26 @@ const clamp = (value: number, min: number, max: number) =>
 
 const formatMetricValue = (value: number) => Math.round(value).toLocaleString('ru-RU');
 
+const moodOptions: {
+  value: ShiftMood;
+  emoji: string;
+  label: string;
+}[] = [
+  { value: 'sad', emoji: '😞', label: 'Тяжело' },
+  { value: 'tired', emoji: '😐', label: 'Неровно' },
+  { value: 'okay', emoji: '🙂', label: 'Нормально' },
+  { value: 'happy', emoji: '😄', label: 'Хорошо' },
+  { value: 'amazing', emoji: '🤩', label: 'Огонь' },
+];
+
+const moodEmojiMap: Record<ShiftMood, string> = {
+  sad: '😞',
+  tired: '😐',
+  okay: '🙂',
+  happy: '😄',
+  amazing: '🤩',
+};
+
 export const ShiftScreen = () => {
   const {
     telegramName,
@@ -63,20 +89,54 @@ export const ShiftScreen = () => {
     revenueGoals,
     startTimeEntry,
     endCurrentTimeEntry,
+    shiftReflections,
+    loadShiftReflections,
+    submitShiftReflection,
+    refreshLoginEmployees,
     tasks,
   } = useAppStore();
   const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
+  const loginEmployees = useAppStore(getLoginEmployees);
   const [showPhotos, setShowPhotos] = useState(false);
   const [showEarlyStartModal, setShowEarlyStartModal] = useState(false);
   const [earlyReason, setEarlyReason] = useState('');
   const [shortShiftPrompt, setShortShiftPrompt] = useState(false);
   const [entryError, setEntryError] = useState<string | null>(null);
+  const [wrapUpContext, setWrapUpContext] = useState<{
+    dateKey: string;
+    canGiftStar: boolean;
+  } | null>(null);
+  const [selectedMood, setSelectedMood] = useState<ShiftMood | null>(null);
+  const [selectedRecipientId, setSelectedRecipientId] = useState<string | null>(null);
+  const [reflectionError, setReflectionError] = useState<string | null>(null);
+  const [isSavingReflection, setIsSavingReflection] = useState(false);
 
   useEffect(() => {
     initTelegramApp();
     setTelegramName(getTelegramDisplayName());
   }, [setTelegramName]);
+
+  const todayDateKey = getLocalDateKey(new Date());
+
+  useEffect(() => {
+    if (!currentEmployee?.id) {
+      return;
+    }
+
+    void loadShiftReflections({
+      period: 'week',
+      dateKey: todayDateKey,
+    });
+  }, [currentEmployee?.id, loadShiftReflections, todayDateKey]);
+
+  useEffect(() => {
+    if (loginEmployees.length > 0) {
+      return;
+    }
+
+    void refreshLoginEmployees();
+  }, [loginEmployees.length, refreshLoginEmployees]);
 
   const stages = useMemo(() => {
     const handoffComplete = handoffItems.every((item) => item.checked && item.reason.trim());
@@ -119,6 +179,19 @@ export const ShiftScreen = () => {
       )
     : [];
   const acceptedTasksCount = myTasks.filter((task) => task.status === 'accepted').length;
+  const todayReflection = currentEmployee
+    ? getEmployeeReflectionForDate(shiftReflections, currentEmployee.id, todayDateKey)
+    : null;
+  const teamStarsCount = currentEmployee
+    ? getReceivedStarsCount(shiftReflections, currentEmployee.id)
+    : 0;
+  const gratitudeCandidates = useMemo(
+    () =>
+      loginEmployees
+        .filter((employee) => employee.id !== currentEmployee?.id)
+        .sort((left, right) => left.fullName.localeCompare(right.fullName, 'ru')),
+    [currentEmployee?.id, loginEmployees],
+  );
   const workedNowLabel = activeEntry
     ? formatDuration(durationHours(activeEntry.startAt, null))
     : null;
@@ -184,7 +257,9 @@ export const ShiftScreen = () => {
   };
 
   const onEndShift = (force = false) => {
-    const result = endCurrentTimeEntry({ force });
+    const endAt = new Date().toISOString();
+    const closedShiftHours = activeEntry ? durationHours(activeEntry.startAt, endAt) : 0;
+    const result = endCurrentTimeEntry({ force, now: endAt });
 
     if (result.requiresConfirmation) {
       setShortShiftPrompt(true);
@@ -196,7 +271,61 @@ export const ShiftScreen = () => {
       return;
     }
 
+    setEntryError(null);
     setShortShiftPrompt(false);
+
+    if (!currentEmployee) {
+      return;
+    }
+
+    const dateKey = getLocalDateKey(new Date(endAt));
+    const existingReflection = getEmployeeReflectionForDate(
+      useAppStore.getState().shiftReflections,
+      currentEmployee.id,
+      dateKey,
+    );
+
+    if (existingReflection) {
+      return;
+    }
+
+    setSelectedMood(null);
+    setSelectedRecipientId(null);
+    setReflectionError(null);
+    setWrapUpContext({
+      dateKey,
+      canGiftStar: closedShiftHours >= 5,
+    });
+  };
+
+  const submitWrapUp = async () => {
+    if (!wrapUpContext || !selectedMood) {
+      return;
+    }
+
+    setIsSavingReflection(true);
+    setReflectionError(null);
+
+    const result = await submitShiftReflection({
+      dateKey: wrapUpContext.dateKey,
+      mood: selectedMood,
+      starRecipientId: wrapUpContext.canGiftStar ? selectedRecipientId : null,
+    });
+
+    setIsSavingReflection(false);
+
+    if (!result.ok) {
+      setReflectionError(result.reason ?? 'Не удалось сохранить итог смены');
+      return;
+    }
+
+    setWrapUpContext(null);
+    setSelectedMood(null);
+    setSelectedRecipientId(null);
+    void loadShiftReflections({
+      period: 'week',
+      dateKey: wrapUpContext.dateKey,
+    });
   };
 
   return (
@@ -324,11 +453,17 @@ export const ShiftScreen = () => {
           </div>
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Командный зачот</p>
-            <p className="mt-1 text-xl font-semibold text-ink">Скоро</p>
+            <p className="mt-1 text-xl font-semibold text-ink">{teamStarsCount} ★</p>
+            <p className="mt-1 text-xs text-ink/45">получено за неделю</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Личный зачот</p>
-            <p className="mt-1 text-xl font-semibold text-ink">Скоро</p>
+            <p className="mt-1 text-xl font-semibold text-ink">
+              {todayReflection ? moodEmojiMap[todayReflection.mood] : '—'}
+            </p>
+            <p className="mt-1 text-xs text-ink/45">
+              {todayReflection ? 'настрой дня' : 'без оценки сегодня'}
+            </p>
           </div>
         </div>
       </Card>
@@ -488,6 +623,111 @@ export const ShiftScreen = () => {
               >
                 Вернуться
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {wrapUpContext ? (
+        <div className="fixed inset-0 z-20 flex items-end bg-black/30">
+          <div className="w-full rounded-t-[2rem] bg-white p-5">
+            <h3 className="text-lg font-semibold">Как прошел день?</h3>
+            <p className="mt-2 text-sm text-ink/60">
+              Отметьте настроение смены и, если хотите, поблагодарите коллегу одной
+              звездочкой.
+            </p>
+
+            <div className="mt-4 grid grid-cols-5 gap-2">
+              {moodOptions.map((option) => {
+                const isSelected = selectedMood === option.value;
+
+                return (
+                  <button
+                    key={option.value}
+                    className={`rounded-2xl border px-2 py-3 text-center transition ${
+                      isSelected
+                        ? 'border-ink bg-ink text-white'
+                        : 'border-ink/10 bg-fog text-ink'
+                    }`}
+                    onClick={() => setSelectedMood(option.value)}
+                  >
+                    <div className="text-2xl">{option.emoji}</div>
+                    <div className="mt-2 text-[11px] font-semibold">{option.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-fog p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-ink">1 звездочка благодарности</p>
+                  <p className="mt-1 text-sm text-ink/55">
+                    Дарится один раз в сутки и обновляется после 00:00.
+                  </p>
+                </div>
+                <div className="text-xl">⭐</div>
+              </div>
+
+              {wrapUpContext.canGiftStar ? (
+                gratitudeCandidates.length > 0 ? (
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {gratitudeCandidates.map((employee) => {
+                      const isSelected = selectedRecipientId === employee.id;
+
+                      return (
+                        <button
+                          key={employee.id}
+                          className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${
+                            isSelected
+                              ? 'border-citrus bg-citrus/20 text-ink'
+                              : 'border-ink/10 bg-white text-ink'
+                          }`}
+                          onClick={() =>
+                            setSelectedRecipientId((current) =>
+                              current === employee.id ? null : employee.id,
+                            )
+                          }
+                        >
+                          {employee.fullName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-ink/55">
+                    Пока некого отметить: список сотрудников еще пуст.
+                  </p>
+                )
+              ) : (
+                <p className="mt-3 text-sm text-ink/55">
+                  Звездочка откроется после смены длиной не менее 5 часов.
+                </p>
+              )}
+            </div>
+
+            {reflectionError ? (
+              <p className="mt-4 text-sm font-semibold text-red-700">{reflectionError}</p>
+            ) : null}
+
+            <div className="mt-5 flex gap-3">
+              <PrimaryButton
+                disabled={!selectedMood || isSavingReflection}
+                onClick={() => void submitWrapUp()}
+              >
+                {isSavingReflection ? 'Сохраняем...' : 'Сохранить'}
+              </PrimaryButton>
+              <SecondaryButton
+                className="w-auto shrink-0"
+                onClick={() => {
+                  setWrapUpContext(null);
+                  setSelectedMood(null);
+                  setSelectedRecipientId(null);
+                  setReflectionError(null);
+                }}
+              >
+                Позже
+              </SecondaryButton>
             </div>
           </div>
         </div>

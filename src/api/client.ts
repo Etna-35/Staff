@@ -1,4 +1,11 @@
-import type { Employee, EmployeeLoginOption, EmployeeRole } from '../types/domain';
+import type {
+  Employee,
+  EmployeeLoginOption,
+  EmployeeRole,
+  ShiftMood,
+  ShiftReflection,
+  ShiftReflectionPeriod,
+} from '../types/domain';
 
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -26,6 +33,16 @@ type EmployeeListResponse = {
 type EmployeeResponse = {
   ok: boolean;
   employee: Employee;
+};
+
+type ShiftReflectionListResponse = {
+  ok: boolean;
+  reflections: ShiftReflection[];
+};
+
+type ShiftReflectionResponse = {
+  ok: boolean;
+  reflection: ShiftReflection;
 };
 
 export class ApiError extends Error {
@@ -184,4 +201,32 @@ export const apiClient = {
       token,
       onUnauthorized,
     }),
+  getShiftReflections: (
+    token: string,
+    period: ShiftReflectionPeriod,
+    dateKey: string,
+    onUnauthorized?: () => void,
+  ) =>
+    request<ShiftReflectionListResponse>(
+      `/api/shift-reflections?period=${period}&dateKey=${dateKey}`,
+      {
+        token,
+        onUnauthorized,
+      },
+    ).then((payload) => payload.reflections),
+  submitShiftReflection: (
+    token: string,
+    input: {
+      dateKey: string;
+      mood: ShiftMood;
+      starRecipientId?: string | null;
+    },
+    onUnauthorized?: () => void,
+  ) =>
+    request<ShiftReflectionResponse>('/api/shift-reflections', {
+      method: 'POST',
+      token,
+      body: input,
+      onUnauthorized,
+    }).then((payload) => payload.reflection),
 };

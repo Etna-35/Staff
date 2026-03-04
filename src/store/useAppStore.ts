@@ -25,6 +25,9 @@ import type {
   EmployeeRole,
   HandoffArea,
   RequestCategory,
+  ShiftMood,
+  ShiftReflection,
+  ShiftReflectionPeriod,
   StageKey,
   Task,
   TeamDepartment,
@@ -84,9 +87,16 @@ type DailyBusinessMetricInput = {
   averageCheckActual: number | null;
 };
 
+type ShiftReflectionInput = {
+  dateKey: string;
+  mood: ShiftMood;
+  starRecipientId?: string | null;
+};
+
 type Store = AppState & {
   employeesLoading: boolean;
   loginEmployeesLoading: boolean;
+  shiftReflectionsLoading: boolean;
   authError: string | null;
   setTelegramName: (name: string) => void;
   clearAuthError: () => void;
@@ -115,6 +125,11 @@ type Store = AppState & {
   closeShift: () => void;
   startTimeEntry: (payload?: { now?: string; earlyReason?: string | null }) => ActionResult;
   endCurrentTimeEntry: (payload?: { now?: string; force?: boolean }) => ActionResult;
+  loadShiftReflections: (payload: {
+    period: ShiftReflectionPeriod;
+    dateKey: string;
+  }) => Promise<void>;
+  submitShiftReflection: (input: ShiftReflectionInput) => Promise<ActionResult>;
   saveRevenueGoals: (input: RevenueGoalsInput) => ActionResult;
   saveDailyBusinessMetric: (input: DailyBusinessMetricInput) => ActionResult;
   resetDemo: () => void;
@@ -153,6 +168,7 @@ const normalizeState = (state: AppState): AppState => ({
   telegramName: state.telegramName || 'Гость смены',
   employees: state.employees ?? [],
   loginEmployees: state.loginEmployees ?? [],
+  shiftReflections: state.shiftReflections ?? [],
   revenueGoals: {
     weeklyRevenueTarget: state.revenueGoals?.weeklyRevenueTarget ?? null,
     monthlyRevenueTarget: state.revenueGoals?.monthlyRevenueTarget ?? null,
@@ -240,12 +256,16 @@ const getSessionMe = (state: Store) => state.session.me;
 const sortDailyBusinessMetrics = (metrics: DailyBusinessMetric[]) =>
   [...metrics].sort((left, right) => right.dateKey.localeCompare(left.dateKey));
 
+const sortShiftReflections = (reflections: ShiftReflection[]) =>
+  [...reflections].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
 export const useAppStore = create<Store>()(
   persist(
     (set, get) => ({
       ...normalizeState(cloneInitialState()),
       employeesLoading: false,
       loginEmployeesLoading: false,
+      shiftReflectionsLoading: false,
       authError: null,
       setTelegramName: (name) => set({ telegramName: name }),
       clearAuthError: () => set({ authError: null }),
@@ -262,6 +282,7 @@ export const useAppStore = create<Store>()(
               bootstrapped,
               ...(bootstrapped ? {} : { token: null, me: null }),
             },
+            shiftReflections: bootstrapped ? state.shiftReflections : [],
           }));
 
           if (bootstrapped) {
@@ -366,6 +387,7 @@ export const useAppStore = create<Store>()(
               bootstrapped: true,
               token: sessionToken,
             },
+            shiftReflections: [],
           }));
           await get().loadMe();
           await get().refreshLoginEmployees().catch(() => undefined);
@@ -408,6 +430,7 @@ export const useAppStore = create<Store>()(
               bootstrapped: true,
               token: sessionToken,
             },
+            shiftReflections: [],
           }));
           await get().loadMe();
 
@@ -426,6 +449,8 @@ export const useAppStore = create<Store>()(
       logout: () => {
         set((state) => ({
           authError: null,
+          shiftReflections: [],
+          shiftReflectionsLoading: false,
           session: {
             ...state.session,
             token: null,
@@ -934,6 +959,80 @@ export const useAppStore = create<Store>()(
 
         return { ok: true };
       },
+      loadShiftReflections: async ({ period, dateKey }) => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          set({ shiftReflections: [], shiftReflectionsLoading: false });
+          return;
+        }
+
+        set({ shiftReflectionsLoading: true });
+
+        try {
+          const reflections = await apiClient.getShiftReflections(
+            token,
+            period,
+            dateKey,
+            () => get().logout(),
+          );
+
+          set({
+            authError: null,
+            shiftReflections: sortShiftReflections(reflections),
+            shiftReflectionsLoading: false,
+          });
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            return;
+          }
+
+          set({
+            authError:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось загрузить оценки дня.',
+            shiftReflectionsLoading: false,
+          });
+        }
+      },
+      submitShiftReflection: async (input) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || !currentEmployee) {
+          return {
+            ok: false,
+            reason: 'Сначала войдите по PIN',
+          };
+        }
+
+        try {
+          const reflection = await apiClient.submitShiftReflection(
+            token,
+            input,
+            () => get().logout(),
+          );
+
+          set((state) => ({
+            authError: null,
+            shiftReflections: sortShiftReflections([
+              reflection,
+              ...state.shiftReflections.filter((item) => item.id !== reflection.id),
+            ]),
+          }));
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError
+                ? error.message
+                : 'Не удалось сохранить оценку дня',
+          };
+        }
+      },
       saveRevenueGoals: (input) => {
         const currentEmployee = getCurrentEmployee(get());
 
@@ -1019,6 +1118,7 @@ export const useAppStore = create<Store>()(
           session: state.session,
           employeesLoading: false,
           loginEmployeesLoading: false,
+          shiftReflectionsLoading: false,
         })),
     }),
     {
@@ -1069,6 +1169,7 @@ export const useAppStore = create<Store>()(
           ...normalized,
           employeesLoading: false,
           loginEmployeesLoading: false,
+          shiftReflectionsLoading: false,
           authError: null,
         };
       },
@@ -1152,6 +1253,27 @@ export const getLocalDateKey = (date = new Date()) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
     date.getDate(),
   ).padStart(2, '0')}`;
+
+export const getShiftReflectionsForDate = (
+  reflections: ShiftReflection[],
+  dateKey: string,
+) => reflections.filter((reflection) => reflection.dateKey === dateKey);
+
+export const getEmployeeReflectionForDate = (
+  reflections: ShiftReflection[],
+  employeeId: string,
+  dateKey: string,
+) =>
+  reflections.find(
+    (reflection) =>
+      reflection.employeeId === employeeId && reflection.dateKey === dateKey,
+  ) ?? null;
+
+export const getReceivedStarsCount = (
+  reflections: ShiftReflection[],
+  employeeId: string,
+) =>
+  reflections.filter((reflection) => reflection.starRecipientId === employeeId).length;
 
 const getPeriodBounds = (period: TimesheetPeriod, now = new Date()) => {
   const start = new Date(now);

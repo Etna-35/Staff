@@ -16,6 +16,10 @@ export type TeamDepartment = 'kitchen' | 'bar' | 'hall' | 'other';
 
 export type TimesheetPeriod = 'day' | 'week' | 'month';
 
+export type ShiftReflectionPeriod = 'day' | 'week';
+
+export type ShiftMood = 'sad' | 'tired' | 'okay' | 'happy' | 'amazing';
+
 export type Task = {
   id: string;
   title: string;
@@ -106,6 +110,16 @@ export type TimeEntry = {
   createdAt: string;
 };
 
+export type ShiftReflection = {
+  id: string;
+  dateKey: string;
+  employeeId: string;
+  mood: ShiftMood;
+  starRecipientId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RevenueGoals = {
   weeklyRevenueTarget: number | null;
   monthlyRevenueTarget: number | null;
@@ -132,6 +146,7 @@ export type AppState = {
   loginEmployees: EmployeeLoginOption[];
   session: SessionState;
   timeEntries: TimeEntry[];
+  shiftReflections: ShiftReflection[];
   revenueGoals: RevenueGoals;
   dailyBusinessMetrics: DailyBusinessMetric[];
 };

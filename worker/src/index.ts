@@ -17,6 +17,18 @@ type Employee = {
 
 type EmployeePublic = Pick<Employee, "id" | "fullName" | "role" | "positionTitle" | "isActive">;
 
+type ShiftMood = "sad" | "tired" | "okay" | "happy" | "amazing";
+
+type ShiftReflection = {
+  id: string;
+  dateKey: string;
+  employeeId: string;
+  mood: ShiftMood;
+  starRecipientId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type Env = {
   STAFF_KV: KVNamespace;
   SESSION_SECRET: string;
@@ -25,6 +37,7 @@ type Env = {
 
 const EMP_INDEX_KEY = "employees:index";
 const BOOTSTRAP_KEY = "bootstrap:done";
+const SHIFT_REFLECTION_PREFIX = "shift-reflection:";
 
 function json(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -211,6 +224,82 @@ function assertOwner(session: SessionPayload | null) {
   return session && session.role === "owner";
 }
 
+function isValidDateKey(dateKey: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateKey);
+}
+
+function parseDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatDateKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    date.getUTCDate()
+  ).padStart(2, "0")}`;
+}
+
+function getStartOfWeek(date: Date) {
+  const copy = new Date(date);
+  const day = copy.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setUTCDate(copy.getUTCDate() + diff);
+  return copy;
+}
+
+function getDateKeysForPeriod(period: "day" | "week", dateKey: string) {
+  if (period === "day") {
+    return [dateKey];
+  }
+
+  const start = getStartOfWeek(parseDateKey(dateKey));
+  const keys: string[] = [];
+
+  for (let index = 0; index < 7; index += 1) {
+    const value = new Date(start);
+    value.setUTCDate(start.getUTCDate() + index);
+    keys.push(formatDateKey(value));
+  }
+
+  return keys;
+}
+
+function getShiftReflectionKey(dateKey: string, employeeId: string) {
+  return `${SHIFT_REFLECTION_PREFIX}${dateKey}:${employeeId}`;
+}
+
+async function getShiftReflectionsForDate(env: Env, dateKey: string): Promise<ShiftReflection[]> {
+  const listed = await env.STAFF_KV.list({ prefix: `${SHIFT_REFLECTION_PREFIX}${dateKey}:` });
+
+  const values = await Promise.all(
+    listed.keys.map(async ({ name }) => {
+      const raw = await env.STAFF_KV.get(name);
+      if (!raw) return null;
+
+      try {
+        return JSON.parse(raw) as ShiftReflection;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return values.filter((value): value is ShiftReflection => Boolean(value));
+}
+
+async function getShiftReflectionsForPeriod(
+  env: Env,
+  period: "day" | "week",
+  dateKey: string
+): Promise<ShiftReflection[]> {
+  const dateKeys = getDateKeysForPeriod(period, dateKey);
+  const grouped = await Promise.all(dateKeys.map((key) => getShiftReflectionsForDate(env, key)));
+
+  return grouped
+    .flat()
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") {
@@ -368,6 +457,79 @@ export default {
       });
 
       return withCors(request, env, json({ ok: true }));
+    }
+
+    if (request.method === "GET" && path === "/api/shift-reflections") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const period = url.searchParams.get("period") === "day" ? "day" : "week";
+      const dateKey = (url.searchParams.get("dateKey") || "").trim();
+
+      if (!isValidDateKey(dateKey)) {
+        return withCors(request, env, badRequest("dateKey must be YYYY-MM-DD"));
+      }
+
+      const reflections = await getShiftReflectionsForPeriod(env, period, dateKey);
+      return withCors(request, env, json({ ok: true, reflections }));
+    }
+
+    if (request.method === "POST" && path === "/api/shift-reflections") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const body = await readJson<{ dateKey: string; mood: ShiftMood; starRecipientId?: string | null }>(
+        request
+      );
+      if (!body) return withCors(request, env, badRequest("Expected JSON body"));
+
+      const dateKey = (body.dateKey || "").trim();
+      const mood = body.mood;
+      const starRecipientId = body.starRecipientId ? body.starRecipientId.trim() : null;
+
+      if (!isValidDateKey(dateKey)) {
+        return withCors(request, env, badRequest("dateKey must be YYYY-MM-DD"));
+      }
+
+      if (!["sad", "tired", "okay", "happy", "amazing"].includes(mood)) {
+        return withCors(request, env, badRequest("invalid mood"));
+      }
+
+      if (starRecipientId === emp.id) {
+        return withCors(request, env, badRequest("Нельзя подарить звездочку себе"));
+      }
+
+      if (starRecipientId) {
+        const recipient = await getEmployee(env, starRecipientId);
+        if (!recipient || !recipient.isActive) {
+          return withCors(request, env, badRequest("Получатель звездочки не найден"));
+        }
+      }
+
+      const key = getShiftReflectionKey(dateKey, emp.id);
+      const existing = await env.STAFF_KV.get(key);
+      if (existing) {
+        return withCors(request, env, conflict("today reflection already submitted"));
+      }
+
+      const nowIso = new Date().toISOString();
+      const reflection: ShiftReflection = {
+        id: randomId("reflection"),
+        dateKey,
+        employeeId: emp.id,
+        mood,
+        starRecipientId,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      await env.STAFF_KV.put(key, JSON.stringify(reflection));
+
+      return withCors(request, env, json({ ok: true, reflection }, { status: 201 }));
     }
 
     // Owner-only list
