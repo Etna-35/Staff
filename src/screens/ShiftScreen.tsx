@@ -49,54 +49,7 @@ const stageMeta: Record<
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
-const getMonthProgressRatio = (now = new Date()) => {
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-
-  if (daysInMonth <= 1) {
-    return 1;
-  }
-
-  return clamp((now.getDate() - 1) / (daysInMonth - 1), 0.08, 0.92);
-};
-
-const getTrajectoryPath = ({
-  startValue,
-  currentValue,
-  targetValue,
-  progressRatio,
-}: {
-  startValue: number;
-  currentValue: number;
-  targetValue: number;
-  progressRatio: number;
-}) => {
-  const width = 100;
-  const height = 56;
-  const paddingX = 2;
-  const paddingY = 4;
-  const minValue = Math.min(startValue, currentValue, targetValue) * 0.92;
-  const maxValue = Math.max(startValue, currentValue, targetValue) * 1.08;
-  const range = maxValue - minValue || 1;
-  const toY = (value: number) =>
-    clamp(
-      height - paddingY - ((value - minValue) / range) * (height - paddingY * 2),
-      paddingY,
-      height - paddingY,
-    );
-
-  const startX = paddingX;
-  const currentX = paddingX + (width - paddingX * 2) * progressRatio;
-  const endX = width - paddingX;
-  const startY = toY(startValue);
-  const currentY = toY(currentValue);
-  const endY = toY(targetValue);
-  const controlOneX = startX + (currentX - startX) * 0.5;
-  const controlTwoX = currentX + (endX - currentX) * 0.45;
-
-  return `M ${startX} ${startY}
-    C ${controlOneX} ${startY} ${currentX - 8} ${currentY + 2} ${currentX} ${currentY}
-    S ${controlTwoX} ${endY} ${endX} ${endY}`;
-};
+const formatMetricValue = (value: number) => Math.round(value).toLocaleString('ru-RU');
 
 export const ShiftScreen = () => {
   const {
@@ -173,23 +126,30 @@ export const ShiftScreen = () => {
   const monthlyRevenueActual = getRevenueActualForPeriod(dailyBusinessMetrics, 'month');
   const showRevenueValues = currentEmployee?.role === 'owner';
   const currentMonthMetrics = getDailyBusinessMetricsForPeriod(dailyBusinessMetrics, 'month');
-  const averageCheckProgressRatio = getMonthProgressRatio(new Date());
   const actualAverageCheckValues = currentMonthMetrics
     .map((metric) => metric.averageCheckActual)
     .filter((value): value is number => typeof value === 'number' && value > 0);
   const averageCheckStart = revenueGoals.monthlyAverageCheckStart ?? 3200;
   const averageCheckTarget = revenueGoals.monthlyAverageCheckTarget ?? averageCheckStart;
+  const averageCheckDelta = Math.max(Math.abs(averageCheckTarget - averageCheckStart), 200);
+  const averageCheckMin = Math.max(averageCheckStart - averageCheckDelta, 0);
+  const averageCheckMax = averageCheckStart + averageCheckDelta;
   const currentAverageCheck =
     actualAverageCheckValues.length > 0
       ? actualAverageCheckValues.reduce((sum, value) => sum + value, 0) /
         actualAverageCheckValues.length
       : averageCheckStart;
-  const averageCheckPath = getTrajectoryPath({
-    startValue: averageCheckStart,
-    currentValue: currentAverageCheck,
-    targetValue: averageCheckTarget,
-    progressRatio: averageCheckProgressRatio,
-  });
+  const averageCheckThumbRatio = clamp(
+    (currentAverageCheck - averageCheckMin) / Math.max(averageCheckMax - averageCheckMin, 1),
+    0,
+    1,
+  );
+  const averageCheckFillWidth = Math.max(averageCheckThumbRatio * 100, 0);
+  const averageCheckBaseRatio = clamp(
+    (averageCheckStart - averageCheckMin) / Math.max(averageCheckMax - averageCheckMin, 1),
+    0,
+    1,
+  );
   const weeklyRevenueProgress = revenueGoals.weeklyRevenueTarget
     ? Math.min(Math.round((weeklyRevenueActual / revenueGoals.weeklyRevenueTarget) * 100), 100)
     : 0;
@@ -312,29 +272,36 @@ export const ShiftScreen = () => {
           </div>
           <div className="rounded-2xl bg-fog p-4">
             <p className="text-xs text-ink/50">План среднего чека за месяц</p>
-            <div className="relative mt-4 h-28 overflow-hidden rounded-[1.5rem] bg-[#efe9da]">
-              <div className="absolute inset-x-4 bottom-5 flex items-end gap-3 opacity-75">
-                <div className="h-16 flex-1 rounded-t-[1.6rem] bg-white/70" />
-                <div className="h-10 flex-1 rounded-t-[1.6rem] bg-white/70" />
-                <div className="h-6 flex-1 rounded-full bg-white/70" />
-                <div className="h-6 flex-1 rounded-full bg-white/70" />
-                <div className="h-6 flex-1 rounded-full bg-white/70" />
-              </div>
-              <svg
-                className="absolute inset-0 h-full w-full"
-                viewBox="0 0 100 56"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                <path
-                  d={averageCheckPath}
-                  fill="none"
-                  stroke="#e65e1c"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+            <div className="mt-5">
+              <div className="relative px-1 pt-8">
+                <div className="h-3 rounded-full bg-white/75" />
+                <div
+                  className="absolute left-1 top-8 h-3 rounded-full bg-gradient-to-r from-clay to-citrus"
+                  style={{ width: `${averageCheckFillWidth}%` }}
                 />
-              </svg>
+                <div
+                  className="absolute top-5 h-9 w-px bg-ink/25"
+                  style={{ left: `${averageCheckBaseRatio * 100}%` }}
+                />
+                <div
+                  className="absolute top-0 -translate-x-1/2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-ink shadow-card"
+                  style={{ left: `${averageCheckBaseRatio * 100}%` }}
+                >
+                  {formatMetricValue(averageCheckStart)}
+                </div>
+                <div
+                  className="absolute top-4 -translate-x-1/2"
+                  style={{ left: `${averageCheckThumbRatio * 100}%` }}
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink shadow-card ring-4 ring-white/80">
+                    <div className="h-2.5 w-2.5 rounded-full bg-citrus" />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-5 flex items-center justify-between text-xs font-semibold text-ink/45">
+                <span>{formatMetricValue(averageCheckMin)}</span>
+                <span>{formatMetricValue(averageCheckTarget)}</span>
+              </div>
             </div>
           </div>
         </div>
