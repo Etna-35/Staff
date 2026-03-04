@@ -104,6 +104,7 @@ const OwnerRevenuePanel = () => {
   const loadBonusAwards = useAppStore((state) => state.loadBonusAwards);
   const grantSpecialStar = useAppStore((state) => state.grantSpecialStar);
   const grantBonusAward = useAppStore((state) => state.grantBonusAward);
+  const deleteBonusAward = useAppStore((state) => state.deleteBonusAward);
   const initialTrackedDate = useMemo(() => {
     const now = new Date();
 
@@ -132,6 +133,7 @@ const OwnerRevenuePanel = () => {
   const [bonusAmountInput, setBonusAmountInput] = useState('');
   const [bonusNoteInput, setBonusNoteInput] = useState('');
   const [grantingBonus, setGrantingBonus] = useState(false);
+  const [deletingBonusId, setDeletingBonusId] = useState<string | null>(null);
   const currentMetric = getDailyBusinessMetricForDate(dailyBusinessMetrics, selectedDate);
   const specialStarCandidates = employees
     .filter((employee) => employee.isActive && employee.id !== currentEmployee?.id)
@@ -297,6 +299,23 @@ const OwnerRevenuePanel = () => {
       period: 'month',
       dateKey: getLocalDateKey(new Date()),
     });
+  };
+
+  const handleDeleteBonus = async (awardId: string, dateKey: string) => {
+    setFeedback(null);
+    setError(null);
+    setDeletingBonusId(awardId);
+
+    const result = await deleteBonusAward({ awardId, dateKey });
+
+    setDeletingBonusId(null);
+
+    if (!result.ok) {
+      setError(result.reason ?? 'Не удалось удалить премию');
+      return;
+    }
+
+    setFeedback('Премия удалена');
   };
 
   const changeViewMonth = (direction: -1 | 1) => {
@@ -515,12 +534,26 @@ const OwnerRevenuePanel = () => {
                     className="rounded-2xl bg-white px-3 py-3 text-sm text-ink shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">{employeeName}</span>
-                      <span className="font-semibold">{award.amount.toLocaleString('ru-RU')} ₽</span>
+                      <div className="min-w-0">
+                        <span className="block truncate font-semibold">{employeeName}</span>
+                        <p className="mt-1 text-xs text-ink/45">
+                          {award.note || 'Без комментария'} · {award.dateKey}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span className="block font-semibold">
+                          {award.amount.toLocaleString('ru-RU')} ₽
+                        </span>
+                        <button
+                          type="button"
+                          className="mt-2 text-xs font-semibold text-clay disabled:opacity-45"
+                          onClick={() => void handleDeleteBonus(award.id, award.dateKey)}
+                          disabled={deletingBonusId === award.id}
+                        >
+                          {deletingBonusId === award.id ? 'Удаляем…' : 'Удалить'}
+                        </button>
+                      </div>
                     </div>
-                    <p className="mt-1 text-xs text-ink/45">
-                      {award.note || 'Без комментария'} · {award.dateKey}
-                    </p>
                   </div>
                 );
               })

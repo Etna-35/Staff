@@ -9,6 +9,39 @@ const statusText = {
   returned: 'Вернуть',
 } as const;
 
+const checklistMeta = {
+  waiter: [
+    {
+      title: 'Чек-лист открытия смены',
+      description: 'Подготовка зала, кассы и стартовых позиций.',
+    },
+    {
+      title: 'Чек-лист закрытия смены',
+      description: 'Сдача зала, расчетов и финального порядка.',
+    },
+  ],
+  bartender: [
+    {
+      title: 'Чек-лист открытия смены',
+      description: 'Подготовка бара, льда и стартовых заготовок.',
+    },
+    {
+      title: 'Чек-лист закрытия смены',
+      description: 'Передача бара, остатков и закрывающих действий.',
+    },
+  ],
+  chef: [
+    {
+      title: 'Чек-лист открытия смены',
+      description: 'Проверка кухни, заготовок и стартовых задач смены.',
+    },
+    {
+      title: 'Чек-лист закрытия смены',
+      description: 'Закрытие кухни, передача и финальный контроль.',
+    },
+  ],
+} as const;
+
 export const MissionsScreen = () => {
   const { tasks, createTask, markTaskDone, acceptTask, returnTask } = useAppStore();
   const currentEmployee = useAppStore(getCurrentEmployee);
@@ -23,17 +56,26 @@ export const MissionsScreen = () => {
   );
 
   if (currentEmployee?.role !== 'owner') {
+    const checklistItems = currentEmployee ? checklistMeta[currentEmployee.role] : [];
+
     return (
       <div className="space-y-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Задачи</h1>
         </div>
-        <Card>
-          <p className="text-sm font-semibold text-ink">Раздел в работе</p>
-          <p className="mt-2 text-sm text-ink/60">
-            Для сотрудников задачи скоро появятся в более удобном формате.
-          </p>
-        </Card>
+        <div className="space-y-3">
+          {checklistItems.map((item) => (
+            <Card key={item.title}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-ink">{item.title}</p>
+                  <p className="mt-2 text-sm text-ink/60">{item.description}</p>
+                </div>
+                <Pill>Скоро</Pill>
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }

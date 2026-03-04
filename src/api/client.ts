@@ -315,4 +315,15 @@ export const apiClient = {
       body: input,
       onUnauthorized,
     }).then((payload) => payload.award),
+  deleteBonusAward: (
+    token: string,
+    awardId: string,
+    dateKey: string,
+    onUnauthorized?: () => void,
+  ) =>
+    request<{ ok: boolean }>(`/api/bonus-awards/${awardId}?dateKey=${dateKey}`, {
+      method: 'DELETE',
+      token,
+      onUnauthorized,
+    }),
 };

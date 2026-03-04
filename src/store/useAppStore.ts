@@ -151,6 +151,10 @@ type Store = AppState & {
     amount: number;
     note?: string | null;
   }) => Promise<ActionResult>;
+  deleteBonusAward: (input: {
+    awardId: string;
+    dateKey: string;
+  }) => Promise<ActionResult>;
   saveRevenueGoals: (input: RevenueGoalsInput) => ActionResult;
   saveDailyBusinessMetric: (input: DailyBusinessMetricInput) => ActionResult;
   resetDemo: () => void;
@@ -1230,6 +1234,41 @@ export const useAppStore = create<Store>()(
             ok: false,
             reason:
               error instanceof ApiError ? error.message : 'Не удалось выдать премию',
+          };
+        }
+      },
+      deleteBonusAward: async ({ awardId, dateKey }) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        if (!awardId || !dateKey) {
+          return {
+            ok: false,
+            reason: 'Не удалось определить премию',
+          };
+        }
+
+        try {
+          await apiClient.deleteBonusAward(token, awardId, dateKey, () => get().logout());
+
+          set((state) => ({
+            authError: null,
+            bonusAwards: state.bonusAwards.filter((award) => award.id !== awardId),
+          }));
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось удалить премию',
           };
         }
       },

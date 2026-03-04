@@ -92,7 +92,6 @@ export const ShiftScreen = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
   const activeEntry = useAppStore(getCurrentActiveEntry);
   const loginEmployees = useAppStore(getLoginEmployees);
-  const isOwner = currentEmployee?.role === 'owner';
   const [showPhotos, setShowPhotos] = useState(false);
   const [showEarlyStartModal, setShowEarlyStartModal] = useState(false);
   const [earlyReason, setEarlyReason] = useState('');
@@ -120,7 +119,7 @@ export const ShiftScreen = () => {
     }
 
     void loadShiftReflections({
-      period: 'week',
+      period: 'month',
       dateKey: todayDateKey,
     });
     void loadSpecialStarAwards({
@@ -178,6 +177,10 @@ export const ShiftScreen = () => {
       )
     : [];
   const acceptedTasksCount = myTasks.filter((task) => task.status === 'accepted').length;
+  const checklistTasksCount = currentEmployee?.role && currentEmployee.role !== 'owner' ? 2 : 0;
+  const displayedTasksTotal = currentEmployee?.role === 'owner' ? myTasks.length : checklistTasksCount;
+  const displayedAcceptedTasks =
+    currentEmployee?.role === 'owner' ? acceptedTasksCount : 0;
   const teamStarsCount = currentEmployee
     ? getReceivedStarsCount(shiftReflections, currentEmployee.id)
     : 0;
@@ -322,7 +325,7 @@ export const ShiftScreen = () => {
     setSelectedMood(null);
     setSelectedRecipientId(null);
     void loadShiftReflections({
-      period: 'week',
+      period: 'month',
       dateKey: wrapUpContext.dateKey,
     });
   };
@@ -447,13 +450,13 @@ export const ShiftScreen = () => {
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Задачи</p>
             <p className="mt-1 text-xl font-semibold text-ink">
-              {acceptedTasksCount}/{myTasks.length}
+              {displayedAcceptedTasks}/{displayedTasksTotal}
             </p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Командный зачот</p>
             <p className="mt-1 text-xl font-semibold text-ink">{teamStarsCount} ★</p>
-            <p className="mt-1 text-xs text-ink/45">получено за неделю</p>
+            <p className="mt-1 text-xs text-ink/45">получено за месяц</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Личный зачот</p>
@@ -463,55 +466,53 @@ export const ShiftScreen = () => {
         </div>
       </Card>
 
-      {isOwner ? (
-        <div>
-          <SectionTitle title="Этапы" />
-          <div className="space-y-3">
-            {stages.map((stage) => {
-              const meta = stageMeta[stage.key];
-              const statusIcon = stage.done ? '✅' : stage.key === 'losses' ? '🟡' : '⬜';
+      <div>
+        <SectionTitle title="Этапы" />
+        <div className="space-y-3">
+          {stages.map((stage) => {
+            const meta = stageMeta[stage.key];
+            const statusIcon = stage.done ? '✅' : stage.key === 'losses' ? '🟡' : '⬜';
 
-              return (
-                <Card key={stage.key} className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{statusIcon}</span>
-                      <h3 className="font-semibold">{meta.title}</h3>
-                    </div>
-                    <p className="mt-1 text-sm text-ink/60">{meta.description}</p>
+            return (
+              <Card key={stage.key} className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{statusIcon}</span>
+                    <h3 className="font-semibold">{meta.title}</h3>
                   </div>
-                  <div className="flex shrink-0 gap-2">
-                    {meta.href ? (
-                      <Link
-                        to={meta.href}
-                        className="rounded-2xl bg-fog px-3 py-2 text-sm font-semibold"
-                      >
-                        Открыть
-                      </Link>
-                    ) : null}
-                    {stage.key === 'leftovers' ? (
-                      <button
-                        className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                        onClick={() => completeStage('leftovers')}
-                      >
-                        Готово
-                      </button>
-                    ) : null}
-                    {stage.key === 'closingPhotos' ? (
-                      <button
-                        className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
-                        onClick={() => setShowPhotos(true)}
-                      >
-                        Фото
-                      </button>
-                    ) : null}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                  <p className="mt-1 text-sm text-ink/60">{meta.description}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  {meta.href ? (
+                    <Link
+                      to={meta.href}
+                      className="rounded-2xl bg-fog px-3 py-2 text-sm font-semibold"
+                    >
+                      Открыть
+                    </Link>
+                  ) : null}
+                  {stage.key === 'leftovers' ? (
+                    <button
+                      className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
+                      onClick={() => completeStage('leftovers')}
+                    >
+                      Готово
+                    </button>
+                  ) : null}
+                  {stage.key === 'closingPhotos' ? (
+                    <button
+                      className="rounded-2xl bg-ink px-3 py-2 text-sm font-semibold text-white"
+                      onClick={() => setShowPhotos(true)}
+                    >
+                      Фото
+                    </button>
+                  ) : null}
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      ) : null}
+      </div>
 
       {showPhotos ? (
         <div className="fixed inset-0 z-20 flex items-end bg-black/30">

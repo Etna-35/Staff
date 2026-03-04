@@ -268,7 +268,7 @@ function getStartOfWeek(date: Date) {
   return copy;
 }
 
-function getDateKeysForPeriod(period: "day" | "week", dateKey: string) {
+function getDateKeysForPeriod(period: "day" | "week" | "month", dateKey: string) {
   if (period === "day") {
     return [dateKey];
   }
@@ -785,6 +785,30 @@ export default {
       await env.STAFF_KV.put(getBonusAwardKey(dateKey, award.id), JSON.stringify(award));
 
       return withCors(request, env, json({ ok: true, award }, { status: 201 }));
+    }
+
+    const bonusAwardMatch = path.match(/^\/api\/bonus-awards\/([^/]+)$/);
+
+    if (bonusAwardMatch && request.method === "DELETE") {
+      if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
+
+      const awardId = bonusAwardMatch[1];
+      const dateKey = (url.searchParams.get("dateKey") || "").trim();
+
+      if (!isValidDateKey(dateKey)) {
+        return withCors(request, env, badRequest("dateKey must be YYYY-MM-DD"));
+      }
+
+      const key = getBonusAwardKey(dateKey, awardId);
+      const existing = await env.STAFF_KV.get(key);
+
+      if (!existing) {
+        return withCors(request, env, notFound("Bonus award not found"));
+      }
+
+      await env.STAFF_KV.delete(key);
+
+      return withCors(request, env, json({ ok: true }));
     }
 
     // Owner-only list
