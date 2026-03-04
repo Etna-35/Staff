@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { appLinks } from '../config/links';
 import {
   calcEarnings,
-  getPresetRate,
   isSameDay,
 } from '../lib/timeTracking';
 import {
+  getBonusAwardsTotal,
   getCurrentEmployee,
   getDailyBusinessMetricForDate,
   getDepartmentLabel,
@@ -97,11 +96,14 @@ const StatValue = ({
 const OwnerRevenuePanel = () => {
   const currentEmployee = useAppStore(getCurrentEmployee);
   const employees = useAppStore((state) => state.employees);
+  const bonusAwards = useAppStore((state) => state.bonusAwards);
   const revenueGoals = useAppStore((state) => state.revenueGoals);
   const dailyBusinessMetrics = useAppStore((state) => state.dailyBusinessMetrics);
   const saveRevenueGoals = useAppStore((state) => state.saveRevenueGoals);
   const saveDailyBusinessMetric = useAppStore((state) => state.saveDailyBusinessMetric);
+  const loadBonusAwards = useAppStore((state) => state.loadBonusAwards);
   const grantSpecialStar = useAppStore((state) => state.grantSpecialStar);
+  const grantBonusAward = useAppStore((state) => state.grantBonusAward);
   const initialTrackedDate = useMemo(() => {
     const now = new Date();
 
@@ -126,6 +128,10 @@ const OwnerRevenuePanel = () => {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [grantingEmployeeId, setGrantingEmployeeId] = useState<string | null>(null);
+  const [bonusEmployeeId, setBonusEmployeeId] = useState<string | null>(null);
+  const [bonusAmountInput, setBonusAmountInput] = useState('');
+  const [bonusNoteInput, setBonusNoteInput] = useState('');
+  const [grantingBonus, setGrantingBonus] = useState(false);
   const currentMetric = getDailyBusinessMetricForDate(dailyBusinessMetrics, selectedDate);
   const specialStarCandidates = employees
     .filter((employee) => employee.isActive && employee.id !== currentEmployee?.id)
@@ -175,6 +181,17 @@ const OwnerRevenuePanel = () => {
     setDailyRevenueInput(toInputValue(currentMetric?.revenueActual ?? null));
     setAverageCheckActualInput(toInputValue(currentMetric?.averageCheckActual ?? null));
   }, [currentMetric]);
+
+  useEffect(() => {
+    if (currentEmployee?.role !== 'owner') {
+      return;
+    }
+
+    void loadBonusAwards({
+      period: 'month',
+      dateKey: getLocalDateKey(new Date()),
+    });
+  }, [currentEmployee?.role, loadBonusAwards]);
 
   if (currentEmployee?.role !== 'owner') {
     return null;
@@ -237,6 +254,49 @@ const OwnerRevenuePanel = () => {
       specialStarCandidates.find((employee) => employee.id === employeeId)?.fullName ??
       'сотруднику';
     setFeedback(`Особая звезда отправлена: ${employeeName}`);
+  };
+
+  const handleGrantBonus = async () => {
+    setFeedback(null);
+    setError(null);
+
+    if (!bonusEmployeeId) {
+      setError('Выберите сотрудника для премии');
+      return;
+    }
+
+    const amount = toNullableNumber(bonusAmountInput);
+    if (!(amount && amount > 0)) {
+      setError('Укажите сумму премии');
+      return;
+    }
+
+    setGrantingBonus(true);
+    const result = await grantBonusAward({
+      employeeId: bonusEmployeeId,
+      dateKey: getLocalDateKey(new Date()),
+      amount,
+      note: bonusNoteInput.trim() || null,
+    });
+    setGrantingBonus(false);
+
+    if (!result.ok) {
+      setError(result.reason ?? 'Не удалось выдать премию');
+      return;
+    }
+
+    const employeeName =
+      specialStarCandidates.find((employee) => employee.id === bonusEmployeeId)?.fullName ??
+      'сотруднику';
+
+    setFeedback(`Премия создана: ${employeeName}`);
+    setBonusAmountInput('');
+    setBonusNoteInput('');
+    setBonusEmployeeId(null);
+    void loadBonusAwards({
+      period: 'month',
+      dateKey: getLocalDateKey(new Date()),
+    });
   };
 
   const changeViewMonth = (direction: -1 | 1) => {
@@ -392,6 +452,82 @@ const OwnerRevenuePanel = () => {
           {specialStarCandidates.length === 0 ? (
             <p className="mt-3 text-sm text-ink/55">Пока нет сотрудников для выдачи звезды.</p>
           ) : null}
+        </div>
+
+        <div className="rounded-2xl bg-fog p-4">
+          <p className="text-xs text-ink/45">Премия сотруднику</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {specialStarCandidates.map((employee) => (
+              <button
+                key={`bonus-${employee.id}`}
+                type="button"
+                className={`rounded-2xl px-3 py-3 text-left text-sm font-semibold shadow-sm ${
+                  bonusEmployeeId === employee.id
+                    ? 'bg-ink text-white'
+                    : 'bg-white text-ink'
+                }`}
+                onClick={() => setBonusEmployeeId(employee.id)}
+              >
+                <span className="block truncate">{employee.fullName}</span>
+                <span
+                  className={`mt-1 block text-xs font-medium ${
+                    bonusEmployeeId === employee.id ? 'text-white/65' : 'text-ink/45'
+                  }`}
+                >
+                  Выбрать для премии
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-[minmax(0,1fr)_120px] gap-3">
+            <Input
+              type="number"
+              min="0"
+              placeholder="Сумма премии"
+              value={bonusAmountInput}
+              onChange={(event) => setBonusAmountInput(event.target.value)}
+            />
+            <PrimaryButton disabled={grantingBonus} onClick={() => void handleGrantBonus()}>
+              {grantingBonus ? 'Отправляем…' : 'Выдать'}
+            </PrimaryButton>
+          </div>
+          <div className="mt-3">
+            <Input
+              placeholder="Комментарий для себя"
+              value={bonusNoteInput}
+              onChange={(event) => setBonusNoteInput(event.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-fog p-4">
+          <p className="text-xs text-ink/45">Напоминания по премиям</p>
+          <div className="mt-3 space-y-2">
+            {bonusAwards.length > 0 ? (
+              bonusAwards.map((award) => {
+                const employeeName =
+                  employees.find((employee) => employee.id === award.employeeId)?.fullName ??
+                  'Сотрудник';
+
+                return (
+                  <div
+                    key={award.id}
+                    className="rounded-2xl bg-white px-3 py-3 text-sm text-ink shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">{employeeName}</span>
+                      <span className="font-semibold">{award.amount.toLocaleString('ru-RU')} ₽</span>
+                    </div>
+                    <p className="mt-1 text-xs text-ink/45">
+                      {award.note || 'Без комментария'} · {award.dateKey}
+                    </p>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-ink/55">Премий за этот месяц пока нет.</p>
+            )}
+          </div>
         </div>
 
         {error ? <p className="text-sm text-red-700">{error}</p> : null}
@@ -553,6 +689,7 @@ export const ProfileScreen = () => {
   const [rateInput, setRateInput] = useState(currentEmployee?.hourlyRate?.toString() ?? '');
   const [earningsVisible, setEarningsVisible] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showOwnerPanelModal, setShowOwnerPanelModal] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -563,6 +700,8 @@ export const ProfileScreen = () => {
   const [pinSaving, setPinSaving] = useState(false);
   const [showPinValues, setShowPinValues] = useState(false);
   const [pinSuccess, setPinSuccess] = useState<string | null>(null);
+  const loadBonusAwards = useAppStore((state) => state.loadBonusAwards);
+  const bonusAwards = useAppStore((state) => state.bonusAwards);
 
   useEffect(() => {
     setRateInput(currentEmployee?.hourlyRate?.toString() ?? '');
@@ -583,6 +722,17 @@ export const ProfileScreen = () => {
       void loadEmployees();
     }
   }, [currentEmployee?.role, loadEmployees]);
+
+  useEffect(() => {
+    if (!currentEmployee?.id) {
+      return;
+    }
+
+    void loadBonusAwards({
+      period: 'month',
+      dateKey: getLocalDateKey(new Date()),
+    });
+  }, [currentEmployee?.id, loadBonusAwards]);
 
   if (!currentEmployee) {
     return null;
@@ -612,19 +762,12 @@ export const ProfileScreen = () => {
   const resolvedRate = getProfileRate(currentEmployee);
   const monthlyShiftIncome = calcEarnings(monthEntries, resolvedRate);
   const monthlyTaskRewards = 0;
-  const monthlyOwnerBonuses = 0;
+  const monthlyOwnerBonuses = getBonusAwardsTotal(bonusAwards, currentEmployee.id);
   const monthlyIncomeEstimate =
     monthlyShiftIncome + monthlyTaskRewards + monthlyOwnerBonuses;
   const todayEarned = calcEarnings(todayClosedEntries, resolvedRate);
-  const isFixedRate =
-    currentEmployee.role === 'waiter' || currentEmployee.role === 'bartender';
-  const presetRate = getPresetRate(currentEmployee.role);
 
   const saveRate = async () => {
-    if (isFixedRate) {
-      return;
-    }
-
     setSettingsError(null);
     setSettingsSuccess(null);
     const parsed = Number(rateInput);
@@ -675,6 +818,17 @@ export const ProfileScreen = () => {
       <Card className="flex items-center justify-between gap-3">
         <p className="min-w-0 text-xl font-semibold">{currentEmployee.fullName}</p>
         <div className="flex shrink-0 items-center gap-2">
+          {isOwner ? (
+            <button
+              type="button"
+              title="Панель основателя"
+              aria-label="Панель основателя"
+              className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fog text-lg"
+              onClick={() => setShowOwnerPanelModal(true)}
+            >
+              $
+            </button>
+          ) : null}
           <button
             type="button"
             title="Настройки профиля"
@@ -784,23 +938,30 @@ export const ProfileScreen = () => {
         </>
       )}
 
-      <OwnerRevenuePanel />
       <OwnerStats />
 
       <Card>
-        <SectionTitle title="Полезное" />
-        <div className="space-y-2">
-          <a
-            href={appLinks.knowledgeBaseUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block rounded-2xl bg-fog px-4 py-3 text-sm font-semibold"
-          >
-            База знаний
-          </a>
-          <SecondaryButton onClick={resetDemo}>Сбросить демо-данные</SecondaryButton>
-        </div>
+        <SectionTitle title="Сервис" />
+        <SecondaryButton onClick={resetDemo}>Сбросить демо-данные</SecondaryButton>
       </Card>
+
+      {showOwnerPanelModal ? (
+        <div className="fixed inset-0 z-20 flex items-end bg-black/30">
+          <div className="max-h-[88vh] w-full overflow-y-auto rounded-t-[2rem] bg-white p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold">Панель основателя</h3>
+              <button
+                type="button"
+                className="rounded-2xl border border-ink/10 px-4 py-2 text-sm font-semibold"
+                onClick={() => setShowOwnerPanelModal(false)}
+              >
+                Закрыть
+              </button>
+            </div>
+            <OwnerRevenuePanel />
+          </div>
+        </div>
+      ) : null}
 
       {showSettingsModal ? (
         <div className="fixed inset-0 z-20 flex items-end bg-black/30">
@@ -809,34 +970,25 @@ export const ProfileScreen = () => {
             <div className="space-y-4">
               <div className="rounded-2xl bg-fog p-4">
                 <p className="text-xs text-ink/45">Ставка</p>
-                {isFixedRate ? (
-                  <>
-                    <p className="mt-2 text-lg font-semibold">{presetRate} ₽ / час</p>
-                    <p className="mt-1 text-sm text-ink/55">Фиксированная ставка по роли</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-2 text-sm text-ink/60">
-                      Ставка влияет только на предварительный расчёт дохода.
-                    </p>
-                    <div className="mt-3 flex gap-3">
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="Введите ставку"
-                        value={rateInput}
-                        onChange={(event) => setRateInput(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white"
-                        onClick={() => void saveRate()}
-                      >
-                        Сохранить
-                      </button>
-                    </div>
-                  </>
-                )}
+                <p className="mt-2 text-sm text-ink/60">
+                  Ставка влияет на предварительный расчёт дохода и учитывается в табеле.
+                </p>
+                <div className="mt-3 flex gap-3">
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Введите ставку"
+                    value={rateInput}
+                    onChange={(event) => setRateInput(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white"
+                    onClick={() => void saveRate()}
+                  >
+                    Сохранить
+                  </button>
+                </div>
               </div>
               <div className="rounded-2xl bg-fog p-4">
                 <div className="flex items-center justify-between gap-3">

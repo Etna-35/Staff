@@ -108,6 +108,7 @@ export const mockState: AppState = {
   },
   shiftReflections: [],
   specialStarAwards: [],
+  bonusAwards: [],
   revenueGoals: {
     weeklyRevenueTarget: 580000,
     monthlyRevenueTarget: 2450000,

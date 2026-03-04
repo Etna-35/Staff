@@ -18,7 +18,6 @@ import {
 } from '../store/useAppStore';
 import {
   Card,
-  InlineLink,
   Input,
   Pill,
   PrimaryButton,
@@ -69,14 +68,6 @@ const moodOptions: {
   { value: 'happy', emoji: '😄', label: 'Хорошо' },
   { value: 'amazing', emoji: '🤩', label: 'Огонь' },
 ];
-
-const moodEmojiMap: Record<ShiftMood, string> = {
-  sad: '😞',
-  tired: '😐',
-  okay: '🙂',
-  happy: '😄',
-  amazing: '🤩',
-};
 
 export const ShiftScreen = () => {
   const {
@@ -132,7 +123,7 @@ export const ShiftScreen = () => {
       dateKey: todayDateKey,
     });
     void loadSpecialStarAwards({
-      period: 'week',
+      period: 'month',
       dateKey: todayDateKey,
     });
   }, [currentEmployee?.id, loadShiftReflections, loadSpecialStarAwards, todayDateKey]);
@@ -186,9 +177,6 @@ export const ShiftScreen = () => {
       )
     : [];
   const acceptedTasksCount = myTasks.filter((task) => task.status === 'accepted').length;
-  const todayReflection = currentEmployee
-    ? getEmployeeReflectionForDate(shiftReflections, currentEmployee.id, todayDateKey)
-    : null;
   const teamStarsCount = currentEmployee
     ? getReceivedStarsCount(shiftReflections, currentEmployee.id)
     : 0;
@@ -469,11 +457,7 @@ export const ShiftScreen = () => {
           <div className="rounded-2xl bg-white/70 p-3">
             <p className="text-xs text-ink/55">Личный зачот</p>
             <p className="mt-1 text-xl font-semibold text-ink">{personalStarsCount} ✦</p>
-            <p className="mt-1 text-xs text-ink/45">
-              {todayReflection
-                ? `${moodEmojiMap[todayReflection.mood]} и особые звезды`
-                : 'особые звезды от основателя'}
-            </p>
+            <p className="mt-1 text-xs text-ink/45">получено за месяц</p>
           </div>
         </div>
       </Card>
@@ -525,28 +509,6 @@ export const ShiftScreen = () => {
           })}
         </div>
       </div>
-
-      <Card>
-        <SectionTitle title="Быстрые ссылки" />
-        <div className="space-y-2 text-sm text-ink/75">
-          <a
-            href={appLinks.taskChatUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block rounded-2xl bg-fog px-4 py-3"
-          >
-            Чат задач
-          </a>
-          <a
-            href={appLinks.knowledgeBaseUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block rounded-2xl bg-fog px-4 py-3"
-          >
-            База знаний
-          </a>
-        </div>
-      </Card>
 
       {showPhotos ? (
         <div className="fixed inset-0 z-20 flex items-end bg-black/30">
@@ -743,7 +705,6 @@ export const ShiftScreen = () => {
         </div>
       ) : null}
 
-      <InlineLink to="/missions">Перейти к задачам</InlineLink>
     </div>
   );
 };

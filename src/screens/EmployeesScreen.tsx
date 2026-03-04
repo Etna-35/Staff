@@ -110,7 +110,7 @@ export const EmployeesScreen = () => {
       role: addForm.role,
       positionTitle: getRoleLabel(addForm.role),
       pin: addForm.pin,
-      hourlyRate: addForm.role === 'chef' ? Number(addForm.hourlyRate) || null : null,
+      hourlyRate: Number(addForm.hourlyRate) || null,
     });
     setSubmitting(false);
 
@@ -234,17 +234,15 @@ export const EmployeesScreen = () => {
           <div className="rounded-2xl bg-fog px-4 py-3 text-sm text-ink/65">
             Должность подставится автоматически по выбранной роли.
           </div>
-          {addForm.role === 'chef' ? (
-            <Input
-              type="number"
-              min="0"
-              placeholder="Ставка повара"
-              value={addForm.hourlyRate}
-              onChange={(event) =>
-                setAddForm((current) => ({ ...current, hourlyRate: event.target.value }))
-              }
-            />
-          ) : null}
+          <Input
+            type="number"
+            min="0"
+            placeholder="Ставка в час"
+            value={addForm.hourlyRate}
+            onChange={(event) =>
+              setAddForm((current) => ({ ...current, hourlyRate: event.target.value }))
+            }
+          />
           <Input
             type="password"
             inputMode="numeric"
@@ -388,24 +386,22 @@ export const EmployeesScreen = () => {
               <div className="rounded-2xl bg-fog px-4 py-3 text-sm text-ink/65">
                 Должность синхронизируется с выбранной ролью: {getRoleLabel(editingEmployee.role)}
               </div>
-              {editingEmployee.role === 'chef' || editingEmployee.role === 'owner' ? (
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="Ставка"
-                  value={editingEmployee.hourlyRate ?? ''}
-                  onChange={(event) =>
-                    setEditingEmployee((current) =>
-                      current
-                        ? {
-                            ...current,
-                            hourlyRate: Number(event.target.value) || null,
-                          }
-                        : current,
-                    )
-                  }
-                />
-              ) : null}
+              <Input
+                type="number"
+                min="0"
+                placeholder="Ставка в час"
+                value={editingEmployee.hourlyRate ?? ''}
+                onChange={(event) =>
+                  setEditingEmployee((current) =>
+                    current
+                      ? {
+                          ...current,
+                          hourlyRate: Number(event.target.value) || null,
+                        }
+                      : current,
+                  )
+                }
+              />
               <label className="flex items-center gap-2 text-sm font-semibold text-ink">
                 <input
                   type="checkbox"

@@ -2,6 +2,7 @@ import type {
   Employee,
   EmployeeLoginOption,
   EmployeeRole,
+  BonusAward,
   SpecialStarAward,
   ShiftMood,
   ShiftReflection,
@@ -54,6 +55,16 @@ type SpecialStarAwardListResponse = {
 type SpecialStarAwardResponse = {
   ok: boolean;
   award: SpecialStarAward;
+};
+
+type BonusAwardListResponse = {
+  ok: boolean;
+  awards: BonusAward[];
+};
+
+type BonusAwardResponse = {
+  ok: boolean;
+  award: BonusAward;
 };
 
 export class ApiError extends Error {
@@ -152,6 +163,17 @@ export const apiClient = {
       body: input,
       onUnauthorized,
     }),
+  setMyHourlyRate: (
+    token: string,
+    input: { hourlyRate: number | null },
+    onUnauthorized?: () => void,
+  ) =>
+    request<EmployeeResponse>('/api/me/hourly-rate', {
+      method: 'POST',
+      token,
+      body: input,
+      onUnauthorized,
+    }).then((payload) => payload.employee),
   getEmployees: (token: string, onUnauthorized?: () => void) =>
     request<EmployeeListResponse>('/api/employees', {
       token,
@@ -262,6 +284,32 @@ export const apiClient = {
     onUnauthorized?: () => void,
   ) =>
     request<SpecialStarAwardResponse>('/api/special-stars', {
+      method: 'POST',
+      token,
+      body: input,
+      onUnauthorized,
+    }).then((payload) => payload.award),
+  getBonusAwards: (
+    token: string,
+    period: ShiftReflectionPeriod,
+    dateKey: string,
+    onUnauthorized?: () => void,
+  ) =>
+    request<BonusAwardListResponse>(`/api/bonus-awards?period=${period}&dateKey=${dateKey}`, {
+      token,
+      onUnauthorized,
+    }).then((payload) => payload.awards),
+  grantBonusAward: (
+    token: string,
+    input: {
+      employeeId: string;
+      dateKey: string;
+      amount: number;
+      note?: string | null;
+    },
+    onUnauthorized?: () => void,
+  ) =>
+    request<BonusAwardResponse>('/api/bonus-awards', {
       method: 'POST',
       token,
       body: input,

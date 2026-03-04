@@ -8,6 +8,7 @@ type Employee = {
   fullName: string;
   role: Role;
   positionTitle: string;
+  hourlyRate: number | null;
   pinSalt: string;
   pinHash: string;
   isActive: boolean;
@@ -15,7 +16,7 @@ type Employee = {
   updatedAt: string;
 };
 
-type EmployeePublic = Pick<Employee, "id" | "fullName" | "role" | "positionTitle" | "isActive">;
+type EmployeePublic = Pick<Employee, "id" | "fullName" | "role" | "positionTitle" | "hourlyRate" | "isActive">;
 
 type ShiftMood = "sad" | "tired" | "okay" | "happy" | "amazing";
 
@@ -37,6 +38,16 @@ type SpecialStarAward = {
   createdAt: string;
 };
 
+type BonusAward = {
+  id: string;
+  dateKey: string;
+  employeeId: string;
+  issuedByEmployeeId: string;
+  amount: number;
+  note: string | null;
+  createdAt: string;
+};
+
 type Env = {
   STAFF_KV: KVNamespace;
   SESSION_SECRET: string;
@@ -47,6 +58,7 @@ const EMP_INDEX_KEY = "employees:index";
 const BOOTSTRAP_KEY = "bootstrap:done";
 const SHIFT_REFLECTION_PREFIX = "shift-reflection:";
 const SPECIAL_STAR_PREFIX = "special-star:";
+const BONUS_AWARD_PREFIX = "bonus-award:";
 
 function json(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -225,8 +237,8 @@ async function putEmployee(env: Env, emp: Employee) {
 }
 
 function toPublic(emp: Employee): EmployeePublic {
-  const { id, fullName, role, positionTitle, isActive } = emp;
-  return { id, fullName, role, positionTitle, isActive };
+  const { id, fullName, role, positionTitle, hourlyRate, isActive } = emp;
+  return { id, fullName, role, positionTitle, hourlyRate, isActive };
 }
 
 function assertOwner(session: SessionPayload | null) {
@@ -261,6 +273,22 @@ function getDateKeysForPeriod(period: "day" | "week", dateKey: string) {
     return [dateKey];
   }
 
+  if (period === "month") {
+    const start = parseDateKey(dateKey);
+    start.setUTCDate(1);
+    const year = start.getUTCFullYear();
+    const month = start.getUTCMonth();
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const keys: string[] = [];
+
+    for (let index = 0; index < daysInMonth; index += 1) {
+      const value = new Date(Date.UTC(year, month, index + 1));
+      keys.push(formatDateKey(value));
+    }
+
+    return keys;
+  }
+
   const start = getStartOfWeek(parseDateKey(dateKey));
   const keys: string[] = [];
 
@@ -279,6 +307,10 @@ function getShiftReflectionKey(dateKey: string, employeeId: string) {
 
 function getSpecialStarKey(dateKey: string, awardId: string) {
   return `${SPECIAL_STAR_PREFIX}${dateKey}:${awardId}`;
+}
+
+function getBonusAwardKey(dateKey: string, awardId: string) {
+  return `${BONUS_AWARD_PREFIX}${dateKey}:${awardId}`;
 }
 
 async function getShiftReflectionsForDate(env: Env, dateKey: string): Promise<ShiftReflection[]> {
@@ -302,7 +334,7 @@ async function getShiftReflectionsForDate(env: Env, dateKey: string): Promise<Sh
 
 async function getShiftReflectionsForPeriod(
   env: Env,
-  period: "day" | "week",
+  period: "day" | "week" | "month",
   dateKey: string
 ): Promise<ShiftReflection[]> {
   const dateKeys = getDateKeysForPeriod(period, dateKey);
@@ -337,13 +369,45 @@ async function getSpecialStarAwardsForDate(
 
 async function getSpecialStarAwardsForPeriod(
   env: Env,
-  period: "day" | "week",
+  period: "day" | "week" | "month",
   dateKey: string
 ): Promise<SpecialStarAward[]> {
   const dateKeys = getDateKeysForPeriod(period, dateKey);
   const grouped = await Promise.all(
     dateKeys.map((key) => getSpecialStarAwardsForDate(env, key))
   );
+
+  return grouped
+    .flat()
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+async function getBonusAwardsForDate(env: Env, dateKey: string): Promise<BonusAward[]> {
+  const listed = await env.STAFF_KV.list({ prefix: `${BONUS_AWARD_PREFIX}${dateKey}:` });
+
+  const values = await Promise.all(
+    listed.keys.map(async ({ name }) => {
+      const raw = await env.STAFF_KV.get(name);
+      if (!raw) return null;
+
+      try {
+        return JSON.parse(raw) as BonusAward;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return values.filter((value): value is BonusAward => Boolean(value));
+}
+
+async function getBonusAwardsForPeriod(
+  env: Env,
+  period: "day" | "week" | "month",
+  dateKey: string
+): Promise<BonusAward[]> {
+  const dateKeys = getDateKeysForPeriod(period, dateKey);
+  const grouped = await Promise.all(dateKeys.map((key) => getBonusAwardsForDate(env, key)));
 
   return grouped
     .flat()
@@ -393,6 +457,7 @@ export default {
         fullName,
         role: "owner",
         positionTitle: "Владелец",
+        hourlyRate: null,
         pinSalt: salt,
         pinHash: hash,
         isActive: true,
@@ -509,13 +574,37 @@ export default {
       return withCors(request, env, json({ ok: true }));
     }
 
+    if (request.method === "POST" && path === "/api/me/hourly-rate") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const body = await readJson<{ hourlyRate: number | null }>(request);
+      if (!body) return withCors(request, env, badRequest("Expected JSON body"));
+
+      const hourlyRate =
+        typeof body.hourlyRate === "number" && body.hourlyRate > 0 ? body.hourlyRate : null;
+
+      const updated = {
+        ...emp,
+        hourlyRate,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await putEmployee(env, updated);
+      return withCors(request, env, json({ ok: true, employee: toPublic(updated) }));
+    }
+
     if (request.method === "GET" && path === "/api/shift-reflections") {
       if (!session) return withCors(request, env, unauthorized());
 
       const emp = await getEmployee(env, session.employeeId);
       if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
 
-      const period = url.searchParams.get("period") === "day" ? "day" : "week";
+      const rawPeriod = url.searchParams.get("period");
+      const period =
+        rawPeriod === "day" || rawPeriod === "month" ? rawPeriod : "week";
       const dateKey = (url.searchParams.get("dateKey") || "").trim();
 
       if (!isValidDateKey(dateKey)) {
@@ -588,7 +677,9 @@ export default {
       const emp = await getEmployee(env, session.employeeId);
       if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
 
-      const period = url.searchParams.get("period") === "day" ? "day" : "week";
+      const rawPeriod = url.searchParams.get("period");
+      const period =
+        rawPeriod === "day" || rawPeriod === "month" ? rawPeriod : "week";
       const dateKey = (url.searchParams.get("dateKey") || "").trim();
 
       if (!isValidDateKey(dateKey)) {
@@ -631,6 +722,71 @@ export default {
       return withCors(request, env, json({ ok: true, award }, { status: 201 }));
     }
 
+    if (request.method === "GET" && path === "/api/bonus-awards") {
+      if (!session) return withCors(request, env, unauthorized());
+
+      const emp = await getEmployee(env, session.employeeId);
+      if (!emp || !emp.isActive) return withCors(request, env, unauthorized());
+
+      const rawPeriod = url.searchParams.get("period");
+      const period =
+        rawPeriod === "day" || rawPeriod === "week" ? rawPeriod : "month";
+      const dateKey = (url.searchParams.get("dateKey") || "").trim();
+
+      if (!isValidDateKey(dateKey)) {
+        return withCors(request, env, badRequest("dateKey must be YYYY-MM-DD"));
+      }
+
+      const awards = await getBonusAwardsForPeriod(env, period, dateKey);
+      const visibleAwards =
+        session.role === "owner"
+          ? awards
+          : awards.filter((award) => award.employeeId === session.employeeId);
+
+      return withCors(request, env, json({ ok: true, awards: visibleAwards }));
+    }
+
+    if (request.method === "POST" && path === "/api/bonus-awards") {
+      if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
+
+      const body = await readJson<{ employeeId: string; dateKey: string; amount: number; note?: string | null }>(
+        request
+      );
+      if (!body) return withCors(request, env, badRequest("Expected JSON body"));
+
+      const employeeId = (body.employeeId || "").trim();
+      const dateKey = (body.dateKey || "").trim();
+      const amount = typeof body.amount === "number" ? body.amount : 0;
+      const note = typeof body.note === "string" ? body.note.trim() || null : null;
+
+      if (!employeeId) return withCors(request, env, badRequest("employeeId is required"));
+      if (!isValidDateKey(dateKey)) {
+        return withCors(request, env, badRequest("dateKey must be YYYY-MM-DD"));
+      }
+      if (!(amount > 0)) {
+        return withCors(request, env, badRequest("amount must be greater than 0"));
+      }
+
+      const recipient = await getEmployee(env, employeeId);
+      if (!recipient || !recipient.isActive) {
+        return withCors(request, env, badRequest("Employee not found"));
+      }
+
+      const award: BonusAward = {
+        id: randomId("bonus"),
+        dateKey,
+        employeeId,
+        issuedByEmployeeId: session.employeeId,
+        amount,
+        note,
+        createdAt: new Date().toISOString(),
+      };
+
+      await env.STAFF_KV.put(getBonusAwardKey(dateKey, award.id), JSON.stringify(award));
+
+      return withCors(request, env, json({ ok: true, award }, { status: 201 }));
+    }
+
     // Owner-only list
     if (request.method === "GET" && path === "/api/employees") {
       if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
@@ -648,7 +804,7 @@ export default {
     if (request.method === "POST" && path === "/api/employees") {
       if (!assertOwner(session)) return withCors(request, env, session ? forbidden() : unauthorized());
 
-      const body = await readJson<{ fullName: string; role: Role; positionTitle?: string; pin: string }>(request);
+      const body = await readJson<{ fullName: string; role: Role; positionTitle?: string; pin: string; hourlyRate?: number | null }>(request);
       if (!body) return withCors(request, env, badRequest("Expected JSON body"));
 
       const fullName = (body.fullName || "").trim();
@@ -672,6 +828,7 @@ export default {
         positionTitle:
           positionTitle ||
           (role === "waiter" ? "Официант" : role === "bartender" ? "Бармен" : role === "chef" ? "Повар" : "Владелец"),
+        hourlyRate: typeof body.hourlyRate === "number" && body.hourlyRate > 0 ? body.hourlyRate : null,
         pinSalt: salt,
         pinHash: hash,
         isActive: true,
@@ -718,7 +875,7 @@ export default {
       const emp = await getEmployee(env, id);
       if (!emp) return withCors(request, env, notFound("Employee not found"));
 
-      const body = await readJson<{ role?: Role; positionTitle?: string; isActive?: boolean }>(request);
+      const body = await readJson<{ role?: Role; positionTitle?: string; isActive?: boolean; hourlyRate?: number | null }>(request);
       if (!body) return withCors(request, env, badRequest("Expected JSON body"));
 
       const nextRole = body.role && (["waiter", "bartender", "chef", "owner"] as Role[]).includes(body.role) ? body.role : emp.role;
@@ -727,6 +884,12 @@ export default {
         ...emp,
         role: nextRole,
         positionTitle: typeof body.positionTitle === "string" ? body.positionTitle.trim() : emp.positionTitle,
+        hourlyRate:
+          typeof body.hourlyRate === "number"
+            ? body.hourlyRate > 0
+              ? body.hourlyRate
+              : null
+            : emp.hourlyRate,
         isActive: typeof body.isActive === "boolean" ? body.isActive : emp.isActive,
         updatedAt: new Date().toISOString(),
       });

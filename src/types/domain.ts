@@ -16,7 +16,7 @@ export type TeamDepartment = 'kitchen' | 'bar' | 'hall' | 'other';
 
 export type TimesheetPeriod = 'day' | 'week' | 'month';
 
-export type ShiftReflectionPeriod = 'day' | 'week';
+export type ShiftReflectionPeriod = 'day' | 'week' | 'month';
 
 export type ShiftMood = 'sad' | 'tired' | 'okay' | 'happy' | 'amazing';
 
@@ -128,6 +128,16 @@ export type SpecialStarAward = {
   createdAt: string;
 };
 
+export type BonusAward = {
+  id: string;
+  dateKey: string;
+  employeeId: string;
+  issuedByEmployeeId: string;
+  amount: number;
+  note: string | null;
+  createdAt: string;
+};
+
 export type RevenueGoals = {
   weeklyRevenueTarget: number | null;
   monthlyRevenueTarget: number | null;
@@ -156,6 +166,7 @@ export type AppState = {
   timeEntries: TimeEntry[];
   shiftReflections: ShiftReflection[];
   specialStarAwards: SpecialStarAward[];
+  bonusAwards: BonusAward[];
   revenueGoals: RevenueGoals;
   dailyBusinessMetrics: DailyBusinessMetric[];
 };

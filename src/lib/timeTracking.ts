@@ -6,20 +6,7 @@ export const SHIFT_END_HOUR = 23;
 export const SHIFT_END_MINUTE = 20;
 export const MIN_SHIFT_MINUTES = 15;
 
-export const getPresetRate = (role: EmployeeRole) => {
-  if (role === 'waiter') {
-    return 190;
-  }
-
-  if (role === 'bartender') {
-    return 270;
-  }
-
-  return null;
-};
-
-export const resolveHourlyRate = (employee: Employee) =>
-  getPresetRate(employee.role) ?? employee.hourlyRate;
+export const resolveHourlyRate = (employee: Employee) => employee.hourlyRate;
 
 export const getDefaultPositionTitle = (role: EmployeeRole) => {
   const labels: Record<EmployeeRole, string> = {

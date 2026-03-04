@@ -14,12 +14,12 @@ import {
   formatDuration,
   getDefaultPositionTitle,
   getPeriodEntries,
-  getPresetRate,
   isBeforeShiftStart,
   resolveHourlyRate,
 } from '../lib/timeTracking';
 import type {
   AppState,
+  BonusAward,
   DailyBusinessMetric,
   Employee,
   EmployeeRole,
@@ -99,6 +99,7 @@ type Store = AppState & {
   loginEmployeesLoading: boolean;
   shiftReflectionsLoading: boolean;
   specialStarAwardsLoading: boolean;
+  bonusAwardsLoading: boolean;
   authError: string | null;
   setTelegramName: (name: string) => void;
   clearAuthError: () => void;
@@ -140,6 +141,16 @@ type Store = AppState & {
     employeeId: string;
     dateKey: string;
   }) => Promise<ActionResult>;
+  loadBonusAwards: (payload: {
+    period: ShiftReflectionPeriod;
+    dateKey: string;
+  }) => Promise<void>;
+  grantBonusAward: (input: {
+    employeeId: string;
+    dateKey: string;
+    amount: number;
+    note?: string | null;
+  }) => Promise<ActionResult>;
   saveRevenueGoals: (input: RevenueGoalsInput) => ActionResult;
   saveDailyBusinessMetric: (input: DailyBusinessMetricInput) => ActionResult;
   resetDemo: () => void;
@@ -180,6 +191,7 @@ const normalizeState = (state: AppState): AppState => ({
   loginEmployees: state.loginEmployees ?? [],
   shiftReflections: state.shiftReflections ?? [],
   specialStarAwards: state.specialStarAwards ?? [],
+  bonusAwards: state.bonusAwards ?? [],
   revenueGoals: {
     weeklyRevenueTarget: state.revenueGoals?.weeklyRevenueTarget ?? null,
     monthlyRevenueTarget: state.revenueGoals?.monthlyRevenueTarget ?? null,
@@ -273,6 +285,9 @@ const sortShiftReflections = (reflections: ShiftReflection[]) =>
 const sortSpecialStarAwards = (awards: SpecialStarAward[]) =>
   [...awards].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
+const sortBonusAwards = (awards: BonusAward[]) =>
+  [...awards].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
 export const useAppStore = create<Store>()(
   persist(
     (set, get) => ({
@@ -281,6 +296,7 @@ export const useAppStore = create<Store>()(
       loginEmployeesLoading: false,
       shiftReflectionsLoading: false,
       specialStarAwardsLoading: false,
+      bonusAwardsLoading: false,
       authError: null,
       setTelegramName: (name) => set({ telegramName: name }),
       clearAuthError: () => set({ authError: null }),
@@ -299,6 +315,7 @@ export const useAppStore = create<Store>()(
             },
             shiftReflections: bootstrapped ? state.shiftReflections : [],
             specialStarAwards: bootstrapped ? state.specialStarAwards : [],
+            bonusAwards: bootstrapped ? state.bonusAwards : [],
           }));
 
           if (bootstrapped) {
@@ -405,6 +422,7 @@ export const useAppStore = create<Store>()(
             },
             shiftReflections: [],
             specialStarAwards: [],
+            bonusAwards: [],
           }));
           await get().loadMe();
           await get().refreshLoginEmployees().catch(() => undefined);
@@ -449,6 +467,7 @@ export const useAppStore = create<Store>()(
             },
             shiftReflections: [],
             specialStarAwards: [],
+            bonusAwards: [],
           }));
           await get().loadMe();
 
@@ -471,6 +490,8 @@ export const useAppStore = create<Store>()(
           shiftReflectionsLoading: false,
           specialStarAwards: [],
           specialStarAwardsLoading: false,
+          bonusAwards: [],
+          bonusAwardsLoading: false,
           session: {
             ...state.session,
             token: null,
@@ -524,33 +545,46 @@ export const useAppStore = create<Store>()(
         }
       },
       setHourlyRate: async (rate) => {
+        const token = getSessionToken(get());
         const state = get();
         const currentMe = getSessionMe(state);
 
-        if (!currentMe) {
+        if (!token || !currentMe) {
           return {
             ok: false,
             reason: 'Сначала войдите по PIN',
           };
         }
 
-        const employee = applyEmployeeShape(
-          {
-            ...currentMe,
-            hourlyRate: rate,
-          },
-          currentMe,
-        );
+        try {
+          const employee = applyEmployeeShape(
+            await apiClient.setMyHourlyRate(
+              token,
+              {
+                hourlyRate: rate,
+              },
+              () => get().logout(),
+            ),
+            currentMe,
+          );
 
-        set((current) => ({
-          employees: replaceEmployeeInList(current.employees, employee),
-          session: {
-            ...current.session,
-            me: employee,
-          },
-        }));
+          set((current) => ({
+            authError: null,
+            employees: replaceEmployeeInList(current.employees, employee),
+            session: {
+              ...current.session,
+              me: employee,
+            },
+          }));
 
-        return { ok: true };
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось сохранить ставку',
+          };
+        }
       },
       changeMyPin: async (currentPin, newPin) => {
         const token = getSessionToken(get());
@@ -627,8 +661,7 @@ export const useAppStore = create<Store>()(
             positionTitle:
               input.positionTitle?.trim() || getDefaultPositionTitle(input.role),
             isActive: true,
-            hourlyRate:
-              input.role === 'chef' ? input.hourlyRate ?? null : getPresetRate(input.role),
+            hourlyRate: input.hourlyRate ?? null,
             tenureLabel: input.tenureLabel?.trim() || undefined,
           });
           const employee = applyEmployeeShape(
@@ -640,8 +673,7 @@ export const useAppStore = create<Store>()(
                 positionTitle:
                   input.positionTitle?.trim() || getDefaultPositionTitle(input.role),
                 pin: input.pin,
-                hourlyRate:
-                  input.role === 'chef' ? input.hourlyRate ?? null : getPresetRate(input.role),
+                hourlyRate: input.hourlyRate ?? null,
                 tenureLabel: input.tenureLabel?.trim() || undefined,
               },
               () => get().logout(),
@@ -1127,6 +1159,80 @@ export const useAppStore = create<Store>()(
           };
         }
       },
+      loadBonusAwards: async ({ period, dateKey }) => {
+        const token = getSessionToken(get());
+
+        if (!token) {
+          set({ bonusAwards: [], bonusAwardsLoading: false });
+          return;
+        }
+
+        set({ bonusAwardsLoading: true });
+
+        try {
+          const awards = await apiClient.getBonusAwards(token, period, dateKey, () =>
+            get().logout(),
+          );
+
+          set({
+            authError: null,
+            bonusAwards: sortBonusAwards(awards),
+            bonusAwardsLoading: false,
+          });
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            return;
+          }
+
+          set({
+            authError:
+              error instanceof ApiError ? error.message : 'Не удалось загрузить премии.',
+            bonusAwardsLoading: false,
+          });
+        }
+      },
+      grantBonusAward: async (input) => {
+        const token = getSessionToken(get());
+        const currentEmployee = getSessionMe(get());
+
+        if (!token || currentEmployee?.role !== 'owner') {
+          return {
+            ok: false,
+            reason: 'Нужен owner-доступ',
+          };
+        }
+
+        if (!input.employeeId) {
+          return {
+            ok: false,
+            reason: 'Выберите сотрудника',
+          };
+        }
+
+        if (!(input.amount > 0)) {
+          return {
+            ok: false,
+            reason: 'Укажите сумму премии',
+          };
+        }
+
+        try {
+          const award = await apiClient.grantBonusAward(token, input, () => get().logout());
+
+          set((state) => ({
+            authError: null,
+            bonusAwards: sortBonusAwards([award, ...state.bonusAwards]),
+          }));
+
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            reason:
+              error instanceof ApiError ? error.message : 'Не удалось выдать премию',
+          };
+        }
+      },
       saveRevenueGoals: (input) => {
         const currentEmployee = getCurrentEmployee(get());
 
@@ -1214,6 +1320,7 @@ export const useAppStore = create<Store>()(
           loginEmployeesLoading: false,
           shiftReflectionsLoading: false,
           specialStarAwardsLoading: false,
+          bonusAwardsLoading: false,
         })),
     }),
     {
@@ -1266,6 +1373,7 @@ export const useAppStore = create<Store>()(
           loginEmployeesLoading: false,
           shiftReflectionsLoading: false,
           specialStarAwardsLoading: false,
+          bonusAwardsLoading: false,
           authError: null,
         };
       },
@@ -1375,6 +1483,11 @@ export const getReceivedSpecialStarsCount = (
   awards: SpecialStarAward[],
   employeeId: string,
 ) => awards.filter((award) => award.employeeId === employeeId).length;
+
+export const getBonusAwardsTotal = (awards: BonusAward[], employeeId: string) =>
+  awards
+    .filter((award) => award.employeeId === employeeId)
+    .reduce((sum, award) => sum + award.amount, 0);
 
 const getPeriodBounds = (period: TimesheetPeriod, now = new Date()) => {
   const start = new Date(now);
