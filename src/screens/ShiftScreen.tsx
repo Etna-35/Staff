@@ -5,6 +5,7 @@ import { initTelegramApp, getTelegramDisplayName } from '../lib/telegram';
 import { durationHours, formatDuration, isBeforeShiftStart } from '../lib/timeTracking';
 import {
   getDailyBusinessMetricForDate,
+  getDailyBusinessMetricsForPeriod,
   getCurrentActiveEntry,
   getCurrentEmployee,
   getLocalDateKey,
@@ -120,10 +121,28 @@ export const ShiftScreen = () => {
     : null;
   const weeklyRevenueActual = getRevenueActualForPeriod(dailyBusinessMetrics, 'week');
   const monthlyRevenueActual = getRevenueActualForPeriod(dailyBusinessMetrics, 'month');
-  const todayMetric = getDailyBusinessMetricForDate(
-    dailyBusinessMetrics,
-    getLocalDateKey(new Date()),
-  );
+  const showRevenueValues = currentEmployee?.role === 'owner';
+  const currentWeekMetrics = getDailyBusinessMetricsForPeriod(dailyBusinessMetrics, 'week');
+  const weekAverageCheckValues = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diff);
+    monday.setHours(12, 0, 0, 0);
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + index);
+      const metric = getDailyBusinessMetricForDate(
+        currentWeekMetrics,
+        getLocalDateKey(date),
+      );
+
+      return metric?.averageCheckActual ?? 0;
+    });
+  }, [currentWeekMetrics]);
+  const maxAverageCheckValue = Math.max(...weekAverageCheckValues, 1);
   const weeklyRevenueProgress = revenueGoals.weeklyRevenueTarget
     ? Math.min(Math.round((weeklyRevenueActual / revenueGoals.weeklyRevenueTarget) * 100), 100)
     : 0;
@@ -221,32 +240,44 @@ export const ShiftScreen = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="font-medium text-ink">Неделя по выручке</span>
-              <span className="text-ink/60">
-                {revenueGoals.weeklyRevenueTarget
-                  ? `${weeklyRevenueActual.toLocaleString('ru-RU')} / ${revenueGoals.weeklyRevenueTarget.toLocaleString('ru-RU')} ₽`
-                  : 'План не задан'}
-              </span>
+              {showRevenueValues ? (
+                <span className="text-ink/60">
+                  {revenueGoals.weeklyRevenueTarget
+                    ? `${weeklyRevenueActual.toLocaleString('ru-RU')} / ${revenueGoals.weeklyRevenueTarget.toLocaleString('ru-RU')} ₽`
+                    : 'План не задан'}
+                </span>
+              ) : null}
             </div>
             <ProgressBar value={weeklyRevenueProgress} hideHeader />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="font-medium text-ink">Месяц по выручке</span>
-              <span className="text-ink/60">
-                {revenueGoals.monthlyRevenueTarget
-                  ? `${monthlyRevenueActual.toLocaleString('ru-RU')} / ${revenueGoals.monthlyRevenueTarget.toLocaleString('ru-RU')} ₽`
-                  : 'План не задан'}
-              </span>
+              {showRevenueValues ? (
+                <span className="text-ink/60">
+                  {revenueGoals.monthlyRevenueTarget
+                    ? `${monthlyRevenueActual.toLocaleString('ru-RU')} / ${revenueGoals.monthlyRevenueTarget.toLocaleString('ru-RU')} ₽`
+                    : 'План не задан'}
+                </span>
+              ) : null}
             </div>
             <ProgressBar value={monthlyRevenueProgress} hideHeader />
           </div>
           <div className="rounded-2xl bg-fog p-4">
-            <p className="text-xs text-ink/50">Средний чек сегодня</p>
-            <p className="mt-2 text-xl font-semibold text-ink">
-              {todayMetric?.averageCheckTarget || todayMetric?.averageCheckActual
-                ? `${(todayMetric?.averageCheckActual ?? 0).toLocaleString('ru-RU')} / ${(todayMetric?.averageCheckTarget ?? 0).toLocaleString('ru-RU')} ₽`
-                : 'План не задан'}
-            </p>
+            <p className="text-xs text-ink/50">План среднего чека за неделю</p>
+            <div className="mt-4 flex h-24 items-end gap-2">
+              {weekAverageCheckValues.map((value, index) => {
+                const heightPercent = value > 0 ? Math.max((value / maxAverageCheckValue) * 100, 18) : 12;
+
+                return (
+                  <div
+                    key={`${index}-${value}`}
+                    className="flex-1 rounded-full bg-white/70"
+                    style={{ height: `${heightPercent}%` }}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
       </Card>

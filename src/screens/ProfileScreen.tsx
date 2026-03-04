@@ -85,10 +85,10 @@ const OwnerRevenuePanel = () => {
     toInputValue(revenueGoals.monthlyRevenueTarget),
   );
   const [dailyRevenueInput, setDailyRevenueInput] = useState('');
-  const [averageCheckTargetInput, setAverageCheckTargetInput] = useState('');
   const [averageCheckActualInput, setAverageCheckActualInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const currentMetric = getDailyBusinessMetricForDate(dailyBusinessMetrics, selectedDate);
 
   useEffect(() => {
     setWeeklyPlanInput(toInputValue(revenueGoals.weeklyRevenueTarget));
@@ -96,11 +96,9 @@ const OwnerRevenuePanel = () => {
   }, [revenueGoals.monthlyRevenueTarget, revenueGoals.weeklyRevenueTarget]);
 
   useEffect(() => {
-    const metric = getDailyBusinessMetricForDate(dailyBusinessMetrics, selectedDate);
-    setDailyRevenueInput(toInputValue(metric?.revenueActual ?? null));
-    setAverageCheckTargetInput(toInputValue(metric?.averageCheckTarget ?? null));
-    setAverageCheckActualInput(toInputValue(metric?.averageCheckActual ?? null));
-  }, [dailyBusinessMetrics, selectedDate]);
+    setDailyRevenueInput(toInputValue(currentMetric?.revenueActual ?? null));
+    setAverageCheckActualInput(toInputValue(currentMetric?.averageCheckActual ?? null));
+  }, [currentMetric]);
 
   if (currentEmployee?.role !== 'owner') {
     return null;
@@ -128,7 +126,7 @@ const OwnerRevenuePanel = () => {
     const result = saveDailyBusinessMetric({
       dateKey: selectedDate,
       revenueActual: toNullableNumber(dailyRevenueInput),
-      averageCheckTarget: toNullableNumber(averageCheckTargetInput),
+      averageCheckTarget: currentMetric?.averageCheckTarget ?? null,
       averageCheckActual: toNullableNumber(averageCheckActualInput),
     });
 
@@ -168,7 +166,7 @@ const OwnerRevenuePanel = () => {
         </div>
 
         <div className="rounded-2xl bg-fog p-4">
-          <p className="text-xs text-ink/45">Факт по смене</p>
+          <p className="text-xs text-ink/45">Дневные показатели</p>
           <div className="mt-3 space-y-3">
             <Input
               type="date"
@@ -182,22 +180,13 @@ const OwnerRevenuePanel = () => {
               value={dailyRevenueInput}
               onChange={(event) => setDailyRevenueInput(event.target.value)}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                type="number"
-                min="0"
-                placeholder="План по среднему чеку"
-                value={averageCheckTargetInput}
-                onChange={(event) => setAverageCheckTargetInput(event.target.value)}
-              />
-              <Input
-                type="number"
-                min="0"
-                placeholder="Факт среднего чека"
-                value={averageCheckActualInput}
-                onChange={(event) => setAverageCheckActualInput(event.target.value)}
-              />
-            </div>
+            <Input
+              type="number"
+              min="0"
+              placeholder="Средний чек за день"
+              value={averageCheckActualInput}
+              onChange={(event) => setAverageCheckActualInput(event.target.value)}
+            />
           </div>
           <div className="mt-3">
             <PrimaryButton onClick={saveDailyMetric}>Сохранить факт дня</PrimaryButton>
@@ -398,6 +387,7 @@ export const ProfileScreen = () => {
     return null;
   }
 
+  const isOwner = currentEmployee.role === 'owner';
   const myTasks = tasks.filter(
     (task) => normalizeAssignee(task.assignee) === normalizeAssignee(currentEmployee.fullName),
   );
@@ -509,82 +499,89 @@ export const ProfileScreen = () => {
         </div>
       </Card>
 
-      <Card>
-        <SectionTitle
-          title="Оценка дохода"
-          action={
-            <button
-              className="text-sm font-semibold text-clay"
-              onClick={() => setEarningsVisible((current) => !current)}
-            >
-              👁 Показать
-            </button>
-          }
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-fog p-4">
-            <p className="text-xs text-ink/50">Сегодня</p>
-            <div className="mt-2">
-              <StatValue value={`${todayEarned.toFixed(0)} ₽`} visible={earningsVisible} />
+      {isOwner ? null : (
+        <>
+          <Card>
+            <SectionTitle
+              title="Оценка дохода"
+              action={
+                <button
+                  className="text-sm font-semibold text-clay"
+                  onClick={() => setEarningsVisible((current) => !current)}
+                >
+                  👁 Показать
+                </button>
+              }
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-fog p-4">
+                <p className="text-xs text-ink/50">Сегодня</p>
+                <div className="mt-2">
+                  <StatValue value={`${todayEarned.toFixed(0)} ₽`} visible={earningsVisible} />
+                </div>
+              </div>
+              <div className="rounded-2xl bg-fog p-4">
+                <p className="text-xs text-ink/50">За месяц</p>
+                <div className="mt-2">
+                  <StatValue
+                    value={`${monthlyIncomeEstimate.toFixed(0)} ₽`}
+                    visible={earningsVisible}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="rounded-2xl bg-fog p-4">
-            <p className="text-xs text-ink/50">За месяц</p>
-            <div className="mt-2">
-              <StatValue value={`${monthlyIncomeEstimate.toFixed(0)} ₽`} visible={earningsVisible} />
+          </Card>
+
+          <Card>
+            <SectionTitle title="Учет часов" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-fog p-4">
+                <p className="text-xs text-ink/50">Сегодня</p>
+                <p className="mt-2 text-2xl font-semibold">{todayHours.toFixed(1)} ч</p>
+              </div>
+              <div className="rounded-2xl bg-fog p-4">
+                <p className="text-xs text-ink/50">За месяц</p>
+                <p className="mt-2 text-2xl font-semibold">{monthlyHours.toFixed(1)} ч</p>
+              </div>
             </div>
-          </div>
-        </div>
-      </Card>
+          </Card>
 
-      <Card>
-        <SectionTitle title="Учет часов" />
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-fog p-4">
-            <p className="text-xs text-ink/50">Сегодня</p>
-            <p className="mt-2 text-2xl font-semibold">{todayHours.toFixed(1)} ч</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="bg-white/80">
+              <p className="text-xs text-ink/50">Мой прогресс</p>
+              <p className="mt-2 text-2xl font-semibold">{totalPoints}</p>
+            </Card>
+            <Card className="bg-white/80">
+              <p className="text-xs text-ink/50">Принятые задачи</p>
+              <p className="mt-2 text-2xl font-semibold">{acceptedTasks}</p>
+            </Card>
+            <Card className="bg-white/80">
+              <p className="text-xs text-ink/50">Ожидают приемки</p>
+              <p className="mt-2 text-2xl font-semibold">{waitingTasks}</p>
+            </Card>
+            <Card className="bg-white/80">
+              <p className="text-xs text-ink/50">Просрочки</p>
+              <p className="mt-2 text-2xl font-semibold">{overdueTasks}</p>
+            </Card>
           </div>
-          <div className="rounded-2xl bg-fog p-4">
-            <p className="text-xs text-ink/50">За месяц</p>
-            <p className="mt-2 text-2xl font-semibold">{monthlyHours.toFixed(1)} ч</p>
-          </div>
-        </div>
-      </Card>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="bg-white/80">
-          <p className="text-xs text-ink/50">Мой прогресс</p>
-          <p className="mt-2 text-2xl font-semibold">{totalPoints}</p>
-        </Card>
-        <Card className="bg-white/80">
-          <p className="text-xs text-ink/50">Принятые задачи</p>
-          <p className="mt-2 text-2xl font-semibold">{acceptedTasks}</p>
-        </Card>
-        <Card className="bg-white/80">
-          <p className="text-xs text-ink/50">Ожидают приемки</p>
-          <p className="mt-2 text-2xl font-semibold">{waitingTasks}</p>
-        </Card>
-        <Card className="bg-white/80">
-          <p className="text-xs text-ink/50">Просрочки</p>
-          <p className="mt-2 text-2xl font-semibold">{overdueTasks}</p>
-        </Card>
-      </div>
-
-      <Card>
-        <SectionTitle title="Неделя" />
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-fog p-3">
-            <p className="text-xs text-ink/50">Потери</p>
-            <p className="mt-1 text-xl font-semibold">{weeklyLoss} ₽</p>
-            <p className="text-xs text-ink/50">Если без выручки, показываем сумму</p>
-          </div>
-          <div className="rounded-2xl bg-fog p-3">
-            <p className="text-xs text-ink/50">Часы</p>
-            <p className="mt-1 text-xl font-semibold">{weeklyHours.toFixed(1)} ч</p>
-            <p className="text-xs text-ink/50">Локальный табель за неделю</p>
-          </div>
-        </div>
-      </Card>
+          <Card>
+            <SectionTitle title="Неделя" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-fog p-3">
+                <p className="text-xs text-ink/50">Потери</p>
+                <p className="mt-1 text-xl font-semibold">{weeklyLoss} ₽</p>
+                <p className="text-xs text-ink/50">Если без выручки, показываем сумму</p>
+              </div>
+              <div className="rounded-2xl bg-fog p-3">
+                <p className="text-xs text-ink/50">Часы</p>
+                <p className="mt-1 text-xl font-semibold">{weeklyHours.toFixed(1)} ч</p>
+                <p className="text-xs text-ink/50">Локальный табель за неделю</p>
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
 
       <OwnerRevenuePanel />
       <OwnerStats />
